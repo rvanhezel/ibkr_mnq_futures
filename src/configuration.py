@@ -1,4 +1,3 @@
-from dotenv import load_dotenv
 import os
 from src.period import Period
 import configparser
@@ -34,7 +33,7 @@ class Configuration:
         self.take_profit_ticks = self.config.getfloat('Risk_Management', 'take_profit_ticks')
         self.max_24h_loss_per_contract = self.config.getfloat('Risk_Management', 'max_24h_loss_per_contract')
         self.trading_pause_hours = self.config.getint('Risk_Management', 'trading_pause_hours')
-        self.no_overnight_risk = self.config.getboolean('Risk_Management', 'no_overnight_risk')
+        self.no_endofday_risk = self.config.getboolean('Risk_Management', 'no_endofday_risk')
 
         # Market Data section
         self.mnq_tick_size = self.config.getfloat('Market_Data', 'mnq_tick_size')
