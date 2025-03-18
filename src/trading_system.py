@@ -1,7 +1,7 @@
 import time
 from datetime import datetime
 import pytz
-from risk_manager import RiskManager
+from src.risk_manager import RiskManager
 import logging
 from src.ibkr_api import IBConnection
 from src.configuration import Configuration
@@ -9,13 +9,22 @@ from src.strategys.bb_rsi_strategy import BollingerBandRSIStrategy
 from src.utilities.enums import Signal
 import pandas as pd
 import os
+import shutil
 
 
 class TradingSystem:
 
     def __init__(self, cfg: Configuration):
         self.api = IBConnection(cfg.ib_host, cfg.ib_port, cfg.ib_client_id)
-        self.risk_manager = RiskManager()
+        self.risk_manager = RiskManager(
+            cfg.timezone, 
+            cfg.trading_start_time, 
+            cfg.trading_end_time, 
+            cfg.max_24h_loss_per_contract, 
+            cfg.trading_pause_hours, 
+            cfg.mnq_tick_size, 
+            cfg.stop_loss_ticks, 
+            cfg.take_profit_ticks)
         self.strategy = BollingerBandRSIStrategy()
         self.config = cfg
 
@@ -23,11 +32,13 @@ class TradingSystem:
         self.active_orders = []
         self.historical_data = pd.DataFrame()
         
+        
     def start(self):
         """Start the trading system"""
         try:
+            self._save_config()
             logging.info("Starting trading system...")
-            
+
             self.api.connect()
             while True:
                 try:
@@ -36,31 +47,21 @@ class TradingSystem:
                     logging.error(f"Error in trading loop: {str(e)}")
                     time.sleep(10)  # Wait before retrying
 
+        except ConnectionError as e:
+            logging.error(f"Failed to connect to Interactive Brokers: {str(e)}")
+
         except KeyboardInterrupt:
             logging.info("KeyboardInterrupt - Shutting down trading system...")
-            self._save_historical_data()
+
+        except Exception as e:
+            logging.error(f"Unexpected error within trading system: {str(e)}")
 
         finally:
             self.api.disconnect()
+            self._save_historical_data()
+
             logging.info("Trading system shut down")
             
-    def _save_historical_data(self):
-        """Save historical data to CSV file"""
-        if not self.historical_data.empty:
-            logging.info("Saving historical data to CSV file...")
-
-            # Create output directory if it doesn't exist
-            output_dir = os.path.join(os.getcwd(), "output", "historical_data")
-            os.makedirs(output_dir, exist_ok=True)
-            
-            # Generate filename with timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"historical_data_{self.config.ticker}_{timestamp}.csv"
-            filepath = os.path.join(output_dir, filename)
-            
-            # Save to CSV
-            self.historical_data.to_csv(filepath, index=True)
-            logging.info(f"Historical data saved to {filepath}")
             
     def _trading_loop(self):
         """Main trading loop"""
@@ -89,7 +90,7 @@ class TradingSystem:
                 self._handle_rollover()
                 
             # Get market data and check for trading opportunities
-            self._check_trading_opportunities()
+            # self._check_trading_opportunities()
             
             # Sleep for 1 minute before next iteration
             time.sleep(60)
@@ -214,4 +215,34 @@ class TradingSystem:
         else:
             logging.error("Failed to close positions")
 
+    def _save_config(self):
+        """Save configuration file TO outputs for audit purposes"""
+        # Create output directory if it doesn't exist
+        output_dir = os.path.join(os.getcwd(), "output", "config")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%d%m%Y_%H%M%S")
+        filename = f"config_{timestamp}.cfg"
+        filepath = os.path.join(output_dir, filename)
+        
+        shutil.copy2('run.cfg', filepath)
+        logging.info(f"Configuration saved to {filepath}")
 
+    def _save_historical_data(self):
+        """Save historical data to CSV file"""
+        if not self.historical_data.empty:
+            logging.info("Saving historical data to CSV file...")
+
+            # Create output directory if it doesn't exist
+            output_dir = os.path.join(os.getcwd(), "output", "historical_data")
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Generate filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"historical_data_{self.config.ticker}_{timestamp}.csv"
+            filepath = os.path.join(output_dir, filename)
+            
+            # Save to CSV
+            self.historical_data.to_csv(filepath, index=True)
+            logging.info(f"Historical data saved to {filepath}")

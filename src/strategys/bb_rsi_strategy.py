@@ -1,6 +1,6 @@
 from src.strategys.abstract_strategy import AbstractStrategy
 from src.technical_analysis import TechnicalAnalysis
-from utilities.enums import Signal
+from src.utilities.enums import Signal
 
 
 class BollingerBandRSIStrategy(AbstractStrategy):

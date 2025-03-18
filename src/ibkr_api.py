@@ -8,6 +8,7 @@ from ibapi.contract import Contract
 from ibapi.order import Order
 from ibapi.common import BarData
 import logging
+import socket
 
 
 
@@ -50,11 +51,16 @@ class IBConnection(EWrapper, EClient):
             if self.connected:
                 logging.info("Successfully connected to Interactive Brokers")
             else:
-                logging.error("Failed to connect to Interactive Brokers")
+                raise ConnectionError("Connection timed out waiting for order ID")
                 
-        except Exception as e:
-            logging.error(f"Error connecting to Interactive Brokers: {str(e)}")
+        except (TimeoutError, ConnectionRefusedError, socket.error, ConnectionError) as e:
             self.connected = False
+            raise ConnectionError(f"{str(e)}")
+        
+        except Exception as e:
+            logging.error(f"Unexpected error while connecting to Interactive Brokers: {str(e)}")
+            self.connected = False
+            raise
 
     def disconnect(self):
         """Disconnect from Interactive Brokers"""
@@ -253,8 +259,8 @@ class IBConnection(EWrapper, EClient):
         self.placeOrder(order_id, self.current_contract, order)
         return order_id
 
-    def error(self, req_id, error_code, error_string, misc):
+    def error(self, req_id, error_code, error_string, misc=None):
         if error_code in [2103, 2104, 2105, 2106, 2119, 2158]:
-            logging.info(f"({error_code}) {error_string} {misc}")
+            logging.info(f"({error_code}) {error_string}{' ' + str(misc) if misc is not None else ''}")
         else:
-            logging.error(f"Error {error_code}: {error_string} {misc}") 
+            logging.error(f"Error {error_code}: {error_string}{' ' + str(misc) if misc is not None else ''}") 

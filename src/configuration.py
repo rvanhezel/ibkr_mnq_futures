@@ -1,5 +1,5 @@
 import os
-from src.period import Period
+from src.utilities.period import Period
 import configparser
 import logging
 from datetime import datetime
