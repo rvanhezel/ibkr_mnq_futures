@@ -7,7 +7,7 @@ from src.ibkr_api import IBConnection
 from src.configuration import Configuration
 from src.strategys.bb_rsi_strategy import BollingerBandRSIStrategy
 from src.utilities.enums import Signal
-from src.database import Database
+from src.db.database import Database
 import pandas as pd
 import os
 import shutil
@@ -16,7 +16,7 @@ import shutil
 class TradingSystem:
 
     def __init__(self, cfg: Configuration):
-        self.api = IBConnection(cfg.ib_host, cfg.ib_port, cfg.ib_client_id)
+        self.api = IBConnection(cfg.ib_host, cfg.ib_port, cfg.ib_client_id, cfg.timeout)
         self.risk_manager = RiskManager(
             cfg.timezone, 
             cfg.trading_start_time, 
@@ -85,6 +85,8 @@ class TradingSystem:
                 logging.warning("Outside trading hours. Waiting...")
                 time.sleep(60)
                 continue
+
+            self._check_trading_opportunities()
                 
             # Check PnL & roll if we have an open position
             if self.position != 0:
@@ -100,8 +102,6 @@ class TradingSystem:
                 if self.api.should_rollover(self.config.roll_contract_days_before):
                     logging.warning("Rolling over to next contract")
                     self._handle_rollover()
-                    
-            # self._check_trading_opportunities()
             
             # Sleep for 1 minute before next iteration
             time.sleep(60)
@@ -118,7 +118,6 @@ class TradingSystem:
         
     def _check_trading_opportunities(self):
         """Check for trading opportunities based on strategy"""
-        # Get current contract
         contract = self.api.get_current_contract(
             self.config.ticker,
             self.config.exchange,
@@ -188,9 +187,11 @@ class TradingSystem:
         logging.info(f"Stop loss order status: {stop_order_status}")
         logging.info(f"Profit taker order status: {profit_order_status}")
 
+        # Tracking active orders
         self.position = self.config.contract_number
         self.active_order_ids.extend([order_id, stop_order_id, profit_order_id])
         self.active_market_order_id.extend([order_id])
+        self._add_contract_to_db(contract)  
         
         logging.info(f"Entered long position: {self.config.contract_number} contracts at {fill_price}")
         logging.info(f"Entered Stop loss: {stop_price}, Take profit: {profit_price}")
@@ -224,16 +225,6 @@ class TradingSystem:
         else:
             msg = f"No matching position found for contract filled contract"
             raise Exception(msg)
-
-    def _remove_contract_from_db(self, contract):
-        """Remove contract from database"""
-        if hasattr(contract, 'conId'):
-            if self.db.remove_contract(contract.conId):
-                logging.info(f"Successfully removed contract {contract.conId} from database")
-            else:
-                logging.error(f"Failed to remove contract {contract.conId} from database")
-        else:
-            raise AttributeError(f"Contract has no conId: {contract}")
 
     def _close_all_positions(self):
         """Close all open positions"""
