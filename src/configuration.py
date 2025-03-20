@@ -21,7 +21,7 @@ class Configuration:
         self.ticker = self.config.get('Trading', 'ticker')
         self.order_type = self.config.get('Trading', 'order_type')
         self.exchange = self.config.get('Trading', 'exchange')
-        self.contract_number = self.config.getint('Trading', 'contract_number')
+        self.contract_number = self._check_contract_number(self.config.getint('Trading', 'contract_number'))
         self.currency = self.config.get('Trading', 'currency')
         self.trading_start_time = self.config.get('Trading', 'trading_start_time')
         self.trading_end_time = self.config.get('Trading', 'trading_end_time')
@@ -47,6 +47,7 @@ class Configuration:
         self.ib_client_id = self.config.getint('API', 'ib_client_id')
         self.paper_trading = self.config.getboolean('API', 'paper_trading')
         self.ib_port = self._set_ib_port()
+        self.timeout = self.config.getint('API', 'timeout')
 
         # Technical Indicators section
         self.bollinger_period = self.config.getint('Technical_Indicators', 'bollinger_period')
@@ -73,3 +74,8 @@ class Configuration:
             return 4002 if self.paper_trading else 4001
         else:
             raise ValueError(f"Unknown API type: {self.api}. Must be either 'TWS' or 'IBG'")
+
+    def _check_contract_number(self, contract_number: int):
+        if contract_number != 2 :
+            raise ValueError("Contract number must be 2")
+        return contract_number

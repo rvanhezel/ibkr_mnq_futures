@@ -15,7 +15,7 @@ import pandas as pd
 
 class IBConnection(EWrapper, EClient):
     
-    def __init__(self, host, port, client_id):
+    def __init__(self, host, port, client_id, timeout):
         # Suppress IBKR API's internal debug messages
         logging.getLogger('ibapi').setLevel(logging.WARNING)
         logging.getLogger('ibapi.wrapper').setLevel(logging.WARNING)
@@ -25,6 +25,7 @@ class IBConnection(EWrapper, EClient):
         self.host = host
         self.port = port
         self.client_id = client_id
+        self.timeout = timeout
 
         # Order ID and Request ID needed for the IBKR API
         self.next_order_id = None
@@ -51,7 +52,7 @@ class IBConnection(EWrapper, EClient):
             thread.start()
             
             # Wait for nextValidId to ensure connection is established
-            timeout = 10
+            timeout = self.timeout
             while self.next_order_id is None and timeout > 0:
                 time.sleep(0.1)
                 timeout -= 0.1
@@ -135,7 +136,7 @@ class IBConnection(EWrapper, EClient):
         self.reqContractDetails(req_id, contract)
 
         # Wait for contract details
-        timeout = 3
+        timeout = self.timeout
         while req_id not in self.contract_details and timeout > 0:
             time.sleep(0.1)
             timeout -= 0.1
@@ -159,7 +160,7 @@ class IBConnection(EWrapper, EClient):
         self.reqContractDetails(req_id, self.current_contract)
 
         # Wait for contract details
-        timeout = 10
+        timeout = self.timeout
         while req_id not in self.contract_details and timeout > 0:
             time.sleep(0.1)
             timeout -= 0.1
@@ -200,7 +201,7 @@ class IBConnection(EWrapper, EClient):
         )
 
         # Wait for historical data
-        timeout = 2
+        timeout = self.timeout
         while not self.historical_data[req_id] and timeout > 0:
             time.sleep(0.1)
             timeout -= 0.1
@@ -288,7 +289,7 @@ class IBConnection(EWrapper, EClient):
         
         self.reqPositions() 
 
-        timeout = 5
+        timeout = self.timeout
         while not self.positions[req_id] and timeout > 0:
             time.sleep(0.1)
             timeout -= 0.1
@@ -314,7 +315,7 @@ class IBConnection(EWrapper, EClient):
         self.reqAccountSummary(req_id, "All", "$LEDGER")
 
         # Wait for response
-        timeout = 3
+        timeout = self.timeout
         while timeout > 0 and not self.account_summary[req_id]:
             time.sleep(0.1)
             timeout -= 0.1
@@ -337,7 +338,7 @@ class IBConnection(EWrapper, EClient):
         self.reqPnLSingle(req_id, account, "", contract_id)
 
         # Wait for response
-        timeout = 5
+        timeout = self.timeout
         while not self.pnl_data[req_id] and timeout > 0:
             time.sleep(0.1)
             timeout -= 0.1
