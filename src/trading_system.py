@@ -33,6 +33,7 @@ class TradingSystem:
         self.active_market_orders = []
         self.pnl_request_ids = []
         self.historical_data = pd.DataFrame()
+        self.open_contract = None
         
         
     def start(self):
@@ -83,23 +84,21 @@ class TradingSystem:
                 time.sleep(60)
                 continue
                 
-            # Check PnL if we have an open position
+            # Check PnL & roll if we have an open position
             if self.position != 0:
-                pnl_details = self.api.req_position_pnl(self.open_contract, 1) # account?
-
-            if self.risk_manager.should_pause_trading(pnl_details):
-                pause_end = self.risk_manager.get_pause_end_time()
-                msg = f"Trading paused until {pause_end} due to daily loss threshold breach: {self.risk_manager.get_24h_pnl()}"
-                logging.warning(msg)
-                time.sleep(60)
-                continue
-            
-            # Check for contract rollover
-            if self.api.should_rollover(self.config.roll_contract_days_before):
-                logging.warning("Rolling over to next contract")
-                self._handle_rollover()
+                pnl_details = self.api.req_position_pnl(self.open_contract.conId, os.getenv('IBKR_ACCOUNT_ID')) 
+                if self.risk_manager.should_pause_trading(self. position, pnl_details):
+                    pause_end = self.risk_manager.get_pause_end_time()
+                    msg = f"Trading paused until {pause_end} due to daily loss threshold breach: {self.risk_manager.get_24h_pnl()}"
+                    logging.warning(msg)
+                    time.sleep(60)
+                    continue
                 
-            # Get market data and check for trading opportunities
+                # Check for contract rollover
+                if self.api.should_rollover(self.config.roll_contract_days_before):
+                    logging.warning("Rolling over to next contract")
+                    self._handle_rollover()
+                    
             # self._check_trading_opportunities()
             
             # Sleep for 1 minute before next iteration

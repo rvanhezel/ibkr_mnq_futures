@@ -37,6 +37,7 @@ class IBConnection(EWrapper, EClient):
         self.pnl_data = {}
         self.account_summary = {}
         self.position_data = {}
+        self.order_statuses = {}
 
         self.current_contract = None
         self.connected = False
@@ -243,8 +244,36 @@ class IBConnection(EWrapper, EClient):
         order_id = self.next_order_id
         self.next_order_id += 1
         
+        self.order_statuses[order_id] = {}
         self.placeOrder(order_id, contract, order)
-        return order_id
+
+        timeout = self.timeout
+        while not self.order_statuses[order_id] and timeout > 0:
+            time.sleep(0.1)
+            timeout -= 0.1
+
+        return order_id, self.order_statuses[order_id]
+
+    def orderStatus(self, orderId: int, status: str, filled: float,
+                   remaining: float, avgFillPrice: float, permId: int,
+                   parentId: int, lastFillPrice: float, clientId: int,
+                   whyHeld: str, mktCapPrice: float):
+        """Callback for order status updates"""
+        if orderId in self.order_statuses:
+            self.order_statuses[orderId].update({
+                'status': status,
+                'filled': filled,
+                'remaining': remaining,
+                'avg_fill_price': avgFillPrice,
+                'last_fill_price': lastFillPrice,
+                'parent_id': parentId,
+                'why_held': whyHeld,
+                'mkt_cap_price': mktCapPrice
+            })
+
+    def get_order_status(self, order_id: int) -> dict:
+        """Get the current status of an order"""
+        return self.order_statuses.get(order_id, None)
 
     def place_stop_loss_order(self, contract, parent_order_id, quantity, stop_price):
         """Place a stop-loss order"""
@@ -258,8 +287,15 @@ class IBConnection(EWrapper, EClient):
         order_id = self.next_order_id
         self.next_order_id += 1
         
+        self.order_statuses[order_id] = {}
         self.placeOrder(order_id, contract, order)
-        return order_id
+
+        timeout = self.timeout
+        while not self.order_statuses[order_id] and timeout > 0:
+            time.sleep(0.1)
+            timeout -= 0.1
+
+        return order_id, self.order_statuses[order_id]
 
     def place_profit_taker_order(self, contract, parent_order_id, quantity, profit_price):
         """Place a profit-taking limit order"""
@@ -273,8 +309,15 @@ class IBConnection(EWrapper, EClient):
         order_id = self.next_order_id
         self.next_order_id += 1
         
+        self.order_statuses[order_id] = {}
         self.placeOrder(order_id, contract, order)
-        return order_id
+
+        timeout = self.timeout
+        while not self.order_statuses[order_id] and timeout > 0:
+            time.sleep(0.1)
+            timeout -= 0.1
+
+        return order_id, self.order_statuses[order_id]
 
     def error(self, req_id, error_code, error_string, misc=None):
         if error_code in [2103, 2104, 2105, 2106, 2119, 2158]:
@@ -282,30 +325,26 @@ class IBConnection(EWrapper, EClient):
         else:
             logging.error(f"Error {error_code}: {error_string}{' ' + str(misc) if misc is not None else ''}")
 
-    def get_positions(self):
+    def get_positions(self, account: str):
         """Get current portfolio positions"""
-        req_id = self.get_next_req_id()
-        self.positions[req_id] = []
-        
+        self.positions[account] = []
         self.reqPositions() 
 
         timeout = self.timeout
-        while not self.positions[req_id] and timeout > 0:
+        while not self.positions[account] and timeout > 0:
             time.sleep(0.1)
             timeout -= 0.1
 
-        return self.positions
+        return self.positions.pop(account, [])
     
     def position(self, account: str, contract: Contract, pos: float, avg_cost: float):
         """Callback for position updates"""
-        if account not in self.positions:
-            self.positions[account] = []
-        
-        self.positions[account].append({
-            'contract': contract,
-            'position': pos,
-            'avg_cost': avg_cost
-        })
+        if account in self.positions:
+            self.positions[account].append({
+                'contract': contract,
+                'position': pos,
+                'avg_cost': avg_cost
+            })
 
     def get_account_summary(self):
         """Get all account summary information using the $LEDGER tag"""
@@ -343,7 +382,7 @@ class IBConnection(EWrapper, EClient):
             time.sleep(0.1)
             timeout -= 0.1
 
-        return self.pnl_data
+        return self.pnl_data.pop(req_id, None)
 
     def pnlSingle(
             self, 

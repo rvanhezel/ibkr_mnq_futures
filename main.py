@@ -22,7 +22,7 @@ if __name__ == "__main__":
     # trading_system = TradingSystem(cfg)
     # trading_system.start()
 
-    api = IBConnection(cfg.ib_host, cfg.ib_port, cfg.ib_client_id)
+    api = IBConnection(cfg.ib_host, cfg.ib_port, cfg.ib_client_id, cfg.timeout)
     api.connect()
 
     # contract = api.get_current_contract(cfg.ticker, cfg.exchange, cfg.currency)
@@ -58,26 +58,36 @@ if __name__ == "__main__":
     # contract_details = api.get_contract_details(contract)
     # print(contract_details)
 
-    # entry_order_id = api.place_market_order(contract, 'BUY', 2)
+    order_id, order_status = api.place_market_order(contract, 'BUY', 2)
+    print(f"Order ID: {order_id}, Order Status: {order_status}")
 
     # api.reqHistoricalData(1, contract, "", "1 D", "1 min", what_to_show, True, 2, False, [])
     account_id = os.getenv('IBKR_ACCOUNT_ID')
 
-    positions = api.get_positions()
-    print(f"Positions: {positions}")
+    positions = api.get_positions(account_id)
+    # print(f"Positions: {positions}")
     
     mnq_contracts = []
-    for contract_obj in positions[account_id]:
+    for contract_obj in positions:
+        position_number = int(contract_obj['position'])
         contract = contract_obj['contract']
         if contract.symbol == 'MNQ' and contract.secType == 'FUT':
-            mnq_contracts.append(contract)
+            mnq_contracts.append((contract, position_number))
 
+    print(f"We have {len(mnq_contracts)} MNQ contracts")
     print(f"MNQ Contracts: {mnq_contracts}")
 
-    account_summary = api.get_account_summary()
-    print(f"Account Summary: {account_summary}")
+    contract, position_number = mnq_contracts[-1]
+    if contract.exchange == '':
+        contract.exchange = 'CME'
+        print(f"Updated Contract exchange")
+    entry_order_id = api.place_market_order(contract, 'SELL', position_number)
 
-    pnl_details = api.req_position_pnl(mnq_contracts[0].conId, account_id)
+    updated_positions = api.get_positions(account_id)
+    print(f"Updated Positions: {updated_positions}")
+
+
+    pnl_details = api.req_position_pnl(mnq_contracts[0][0].conId, account_id)
     print(pnl_details)
 
     time.sleep(2)

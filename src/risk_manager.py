@@ -1,6 +1,7 @@
 import datetime
 import pytz
 import pandas as pd
+import os
 
 
 class RiskManager:
@@ -48,12 +49,9 @@ class RiskManager:
         """Calculate total P&L for the last 24 hours"""
         return sum(trade['pnl'] for trade in self.trades_history)
     
-    def should_pause_trading(self, pnl_details):
+    def should_pause_trading(self, num_positions, pnl_details):
         """Check if trading should be paused based on daily PnL"""
-        daily_pnl = self.get_24h_pnl()
-        if daily_pnl <= -self.max_24h_loss:
-            if self.pause_start is None:
-                self.pause_start = pd.Timestamp.now(self.timezone)
+        if pnl_details['unrealized_pnl'] <= -self.max_24h_loss * num_positions:
             return True
         return False
 
