@@ -1,5 +1,6 @@
 import datetime
 import pytz
+import pandas as pd
 
 
 class RiskManager:
@@ -12,9 +13,9 @@ class RiskManager:
                  mnq_tick_size,
                  stop_loss_ticks, 
                  take_profit_ticks):        
-        self.timezone = pytz.timezone(timezone)
-        self.trading_start = datetime.time.fromisoformat(trading_start_time)
-        self.trading_end = datetime.time.fromisoformat(trading_end_time)
+        self.timezone = timezone
+        self.trading_start = pd.to_datetime(trading_start_time, format='%H%M').time()
+        self.trading_end = pd.to_datetime(trading_end_time, format='%H%M').time()
         self.max_24h_loss = max_24h_loss
         self.trading_pause_hours = trading_pause_hours
         self.mnq_tick_size = mnq_tick_size
@@ -35,8 +36,8 @@ class RiskManager:
         
     def _cleanup_old_trades(self):
         """Remove trades older than 24 hours"""
-        now = datetime.datetime.now(self.timezone)
-        cutoff = now - datetime.timedelta(hours=24)
+        now = pd.Timestamp.now(tz=self.timezone)
+        cutoff = now - pd.Timedelta(hours=24)
         
         self.trades_history = [
             trade for trade in self.trades_history
@@ -47,69 +48,49 @@ class RiskManager:
         """Calculate total P&L for the last 24 hours"""
         return sum(trade['pnl'] for trade in self.trades_history)
     
-    def should_pause_trading(self):
-        """Check if trading should be paused based on 24h losses"""
-        # If already paused, check if pause period is over
-        if self.is_paused():
+    def should_pause_trading(self, pnl_details):
+        """Check if trading should be paused based on daily PnL"""
+        daily_pnl = self.get_24h_pnl()
+        if daily_pnl <= -self.max_24h_loss:
+            if self.pause_start is None:
+                self.pause_start = pd.Timestamp.now(self.timezone)
             return True
-            
-        # Check if losses exceed threshold
-        total_pnl = self.get_24h_pnl()
-        if total_pnl < -self.max_24h_loss:
-            self.pause_start_time = datetime.datetime.now(self.timezone)
-            self.pause_end_time = self.pause_start_time + datetime.timedelta(hours=self.trading_pause_hours)
-            return True
-            
         return False
-    
-    def is_paused(self):
-        """Check if trading is currently paused"""
-        if not self.pause_end_time:
-            return False
-            
-        now = datetime.datetime.now(self.timezone)
-        if now < self.pause_end_time:
-            return True
-            
-        # Reset pause times if pause period is over
-        if now >= self.pause_end_time:
-            self.pause_start_time = None
-            self.pause_end_time = None
-            return False
-            
-        return False
-    
+
     def get_pause_end_time(self):
-        """Get the time when trading pause will end"""
-        return self.pause_end_time
+        """Get the time when trading can resume"""
+        if self.pause_start is None:
+            return None
+        return self.pause_start + pd.Timedelta(hours=self.trading_pause_hours)
+
+    def can_resume_trading(self):
+        """Check if trading can resume after pause"""
+        if self.pause_start is None:
+            return True
+        pause_end = self.get_pause_end_time()
+        if pd.Timestamp.now(tz=self.timezone) >= pause_end:
+            self.pause_start = None
+            return True
+        return False
     
     def is_trading_hours(self):
         """Check if current time is within trading hours"""
-        now = datetime.datetime.now(self.timezone)
+        now = pd.Timestamp.now(tz=self.timezone)
         current_time = now.time()
         
-        # Trading hours are from 9 PM to 4 PM EST next day
+        # Trading hours are generally from 9 PM to 4 PM EST next day
         if self.trading_start < self.trading_end:
-            return self.trading_start <= current_time <= self.trading_end
+            return self.trading_start <= current_time < self.trading_end
         else:
-            return current_time >= self.trading_start or current_time <= self.trading_end
+            return not self.trading_end <= current_time < self.trading_start
             
     def is_trading_day(self):
-        """Check if today is a trading day (Sunday night through Friday evening)"""
-        now = datetime.datetime.now(self.timezone)
+        """Check if today is a trading day (Sunday through Friday)"""
+        now = pd.Timestamp.now(tz=self.timezone)
         weekday = now.weekday()
-        current_time = now.time()
         
-        # Sunday (6) after 9 PM
-        if weekday == 6 and current_time >= self.trading_start:
-            return True
-            
-        # Monday through Thursday (0-3)
-        if 0 <= weekday <= 3:
-            return True
-            
-        # Friday (4) before 4 PM
-        if weekday == 4 and current_time <= self.trading_end:
+        # Sunday through Friday (6-4)
+        if 0 <= weekday <= 4 or (weekday == 6 and now.time() >= self.trading_start):
             return True
             
         return False

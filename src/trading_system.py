@@ -30,6 +30,8 @@ class TradingSystem:
 
         self.position = 0
         self.active_orders = []
+        self.active_market_orders = []
+        self.pnl_request_ids = []
         self.historical_data = pd.DataFrame()
         
         
@@ -38,6 +40,11 @@ class TradingSystem:
         try:
             self._save_config()
             logging.info("Starting trading system...")
+
+            if self.config.paper_trading:
+                logging.info("Paper trading mode enabled")
+            else:
+                logging.info("Live trading mode enabled")
 
             self.api.connect()
             while True:
@@ -66,27 +73,30 @@ class TradingSystem:
     def _trading_loop(self):
         """Main trading loop"""
         while True:
-            # Check if it's trading hours
             if not self.risk_manager.is_trading_day():
-                logging.info("Not a trading day. Waiting...")
+                logging.warning("Not a trading day. Waiting...")
                 time.sleep(60)
                 continue
                 
             if not self.risk_manager.is_trading_hours():
-                logging.info("Outside trading hours. Waiting...")
+                logging.warning("Outside trading hours. Waiting...")
                 time.sleep(60)
                 continue
                 
-            # Check if trading is paused due to losses
-            if self.risk_manager.should_pause_trading():
+            # Check PnL if we have an open position
+            if self.position != 0:
+                pnl_details = self.api.req_position_pnl(self.open_contract, 1) # account?
+
+            if self.risk_manager.should_pause_trading(pnl_details):
                 pause_end = self.risk_manager.get_pause_end_time()
-                logging.info(f"Trading paused until {pause_end}")
+                msg = f"Trading paused until {pause_end} due to daily loss threshold breach: {self.risk_manager.get_24h_pnl()}"
+                logging.warning(msg)
                 time.sleep(60)
                 continue
-                
+            
             # Check for contract rollover
             if self.api.should_rollover(self.config.roll_contract_days_before):
-                logging.info("Rolling over to next contract")
+                logging.warning("Rolling over to next contract")
                 self._handle_rollover()
                 
             # Get market data and check for trading opportunities
@@ -107,38 +117,6 @@ class TradingSystem:
         
     def _check_trading_opportunities(self):
         """Check for trading opportunities based on strategy"""
-        # Get historical data
-        new_bars = self.api.get_historical_data(
-            self.config.ticker, 
-            self.config.exchange, 
-            self.config.currency
-        )
-        if not new_bars:
-            logging.warning("No historical data available")
-            return
-            
-        new_data = pd.DataFrame({
-            'datetime': [bar.date for bar in new_bars],
-            'open': [bar.open for bar in new_bars],
-            'high': [bar.high for bar in new_bars],
-            'low': [bar.low for bar in new_bars],
-            'close': [bar.close for bar in new_bars],
-            'volume': [bar.volume for bar in new_bars]
-        })
-        new_data.set_index('datetime', inplace=True)
-        
-        # Append new data to historical data
-        if self.historical_data.empty:
-            self.historical_data = new_data
-        else:
-            # Concatenate and remove duplicates based on index
-            self.historical_data = pd.concat([self.historical_data, new_data])
-
-            #check this
-            self.historical_data = self.historical_data[~self.historical_data.index.duplicated(keep='last')]
-            
-            self.historical_data.sort_index(inplace=True)
-        
         # Get current contract
         contract = self.api.get_current_contract(
             self.config.ticker,
@@ -148,59 +126,73 @@ class TradingSystem:
         if not contract:
             logging.error("No active contract available")
             return
+
+        # Get historical data
+        new_bars_df = self.api.get_historical_data(contract, self.config.duration, self.config.bar_size)
+        if not new_bars_df:
+            logging.warning("No historical data available")
+            return
+        
+        # Append new data to historical data
+        if self.historical_data.empty:
+            self.historical_data = new_bars_df
+        else:
+            self.historical_data = pd.concat([self.historical_data, new_bars_df])
+
+            #check this
+            self.historical_data = self.historical_data[~self.historical_data.index.duplicated(keep='last')]
+            self.historical_data.sort_index(inplace=True)
             
         # Generate signals using the strategy
         signal = self.strategy.generate_signals(self.historical_data, self.config)
         
         # Check for entry conditions if no position
         if self.position == 0 and signal == Signal.BUY:
-            self._enter_position()
+            self._enter_position(contract)
             
-    def _enter_position(self):
-        """Enter a new long position"""
-        contract = self.api.get_current_contract(
-            self.config.ticker,
-            self.config.exchange,
-            self.config.currency
-        )
-        if not contract:
-            logging.error("No active contract available")
-            return
-            
+    def _enter_position(self, contract):
+        """Enter a new long position"""            
         # Place market order
-        entry_order = self.api.place_market_order('BUY', self.config.contract_number)
-        if not entry_order:
+        entry_order_id = self.api.place_market_order(contract, 'BUY', self.config.contract_number)
+        if not entry_order_id:
             logging.error("Failed to place entry order")
             return
             
         # Wait for fill
-        fill_price = entry_order.orderStatus.avgFillPrice
+        fill_price = entry_order_id.orderStatus.avgFillPrice
         if not fill_price:
             logging.error("Entry order not filled")
+            logging.error("Cannot place stop loss and take profit orders")
             return
-            
+        
+        self.open_contract = contract # contract ref for pnl tracking
+
         # Calculate stop loss and take profit prices
         stop_price = fill_price - (self.config.stop_loss_ticks * self.config.mnq_tick_size)
         profit_price = fill_price + (self.config.take_profit_ticks * self.config.mnq_tick_size)
         
         # Place stop loss and take profit orders
-        stop_order = self.api.place_stop_loss_order(entry_order, self.config.contract_number, stop_price)
-        profit_order = self.api.place_profit_taker_order(entry_order, self.config.contract_number, profit_price)
+        stop_order_id = self.api.place_stop_loss_order(contract, entry_order_id, self.config.contract_number, stop_price)
+        profit_order_id = self.api.place_profit_taker_order(contract, entry_order_id, self.config.contract_number, profit_price)
         
         self.position = self.config.contract_number
-        self.active_orders.extend([stop_order, profit_order])
+        self.active_orders.extend([entry_order_id, stop_order_id, profit_order_id])
+        self.active_market_orders.extend([entry_order_id])
         
         logging.info(f"Entered long position: {self.config.contract_number} contracts at {fill_price}")
-        logging.info(f"Stop loss: {stop_price}, Take profit: {profit_price}")
+        logging.info(f"Entered Stop loss: {stop_price}, Take profit: {profit_price}")
         
     def _close_all_positions(self):
         """Close all open positions"""
         if self.position == 0:
             return
             
+        # Cancel PnL requests
+        self.api.cancel_all_pnl_requests()
+            
         # Cancel all active orders
-        for order in self.active_orders:
-            self.api.cancelOrder(order)
+        for order in self.active_market_orders:
+            self.api.cancelOrder(order) #TODO: STP/LMT with parentId - cancelled diff?
         
         # Close position with market order
         close_order = self.api.place_market_order(
@@ -210,7 +202,7 @@ class TradingSystem:
         
         if close_order:
             self.position = 0
-            self.active_orders = []
+            self.active_market_orders = []
             logging.info("Closed all positions")
         else:
             logging.error("Failed to close positions")
