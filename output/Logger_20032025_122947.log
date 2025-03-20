@@ -1,0 +1,11 @@
+20/03/2025 12:29:47.414 - INFO - Logger initialized
+20/03/2025 12:29:47.427 - INFO - (2104) Market data farm connection is OK:usfarm.nj 
+20/03/2025 12:29:47.427 - INFO - (2104) Market data farm connection is OK:usfuture 
+20/03/2025 12:29:47.427 - INFO - (2104) Market data farm connection is OK:cashfarm 
+20/03/2025 12:29:47.427 - INFO - (2104) Market data farm connection is OK:usfarm 
+20/03/2025 12:29:47.427 - INFO - (2106) HMDS data farm connection is OK:euhmds 
+20/03/2025 12:29:47.427 - INFO - (2106) HMDS data farm connection is OK:fundfarm 
+20/03/2025 12:29:47.428 - INFO - (2106) HMDS data farm connection is OK:ushmds 
+20/03/2025 12:29:47.428 - INFO - (2158) Sec-def data farm connection is OK:secdefil 
+20/03/2025 12:29:47.524 - INFO - Successfully connected to Interactive Brokers
+20/03/2025 12:29:56.442 - INFO - Disconnected from Interactive Brokers

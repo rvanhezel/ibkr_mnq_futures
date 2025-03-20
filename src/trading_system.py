@@ -7,6 +7,7 @@ from src.ibkr_api import IBConnection
 from src.configuration import Configuration
 from src.strategys.bb_rsi_strategy import BollingerBandRSIStrategy
 from src.utilities.enums import Signal
+from src.database import Database
 import pandas as pd
 import os
 import shutil
@@ -27,10 +28,11 @@ class TradingSystem:
             cfg.take_profit_ticks)
         self.strategy = BollingerBandRSIStrategy()
         self.config = cfg
+        self.db = Database()
 
         self.position = 0
-        self.active_orders = []
-        self.active_market_orders = []
+        self.active_order_ids = []
+        self.active_market_order_id = []
         self.pnl_request_ids = []
         self.historical_data = pd.DataFrame()
         self.open_contract = None
@@ -53,7 +55,7 @@ class TradingSystem:
                     self._trading_loop()
                 except Exception as e:
                     logging.error(f"Error in trading loop: {str(e)}")
-                    time.sleep(10)  # Wait before retrying
+                    time.sleep(10)  
 
         except ConnectionError as e:
             logging.error(f"Failed to connect to Interactive Brokers: {str(e)}")
@@ -152,35 +154,87 @@ class TradingSystem:
     def _enter_position(self, contract):
         """Enter a new long position"""            
         # Place market order
-        entry_order_id = self.api.place_market_order(contract, 'BUY', self.config.contract_number)
-        if not entry_order_id:
-            logging.error("Failed to place entry order")
-            return
-            
-        # Wait for fill
-        fill_price = entry_order_id.orderStatus.avgFillPrice
-        if not fill_price:
-            logging.error("Entry order not filled")
-            logging.error("Cannot place stop loss and take profit orders")
+        order_id, order_status = self.api.place_market_order(contract, 'BUY', self.config.contract_number)
+        if order_status['status'] != 'Filled':
+            logging.warning(f"Entry order status: {order_status}. Waiting 10s for fill...")
+            time.sleep(10)
+            order_status = self.api.get_order_status(order_id)
+
+        if order_status['status'] != 'Filled':
+            logging.warning(f"Order still not filled. Current status: {order_status}. Waiting 1min  ...")
+            time.sleep(60)
+            order_status = self.api.get_order_status(order_id)
+
+        if order_status['status'] != 'Filled':
+            logging.warning(f"Order still not filled. Current status: {order_status}. Waiting 5min  ...")
+            time.sleep(300)
+            order_status = self.api.get_order_status(order_id)
+
+        if order_status['status'] != 'Filled':
+            logging.error("Order still not filled after 5min. Cancelling order...")
+            self.api.cancelOrder(order_id)
             return
         
-        self.open_contract = contract # contract ref for pnl tracking
-
         # Calculate stop loss and take profit prices
+        fill_price = order_status['avg_fill_price']       
         stop_price = fill_price - (self.config.stop_loss_ticks * self.config.mnq_tick_size)
         profit_price = fill_price + (self.config.take_profit_ticks * self.config.mnq_tick_size)
         
         # Place stop loss and take profit orders
-        stop_order_id = self.api.place_stop_loss_order(contract, entry_order_id, self.config.contract_number, stop_price)
-        profit_order_id = self.api.place_profit_taker_order(contract, entry_order_id, self.config.contract_number, profit_price)
+        stop_order_id, stop_order_status = self.api.place_stop_loss_order(contract, order_id, self.config.contract_number, stop_price)
+        profit_order_id, profit_order_status = self.api.place_profit_taker_order(contract, order_id, self.config.contract_number, profit_price)
         
+        time.sleep(self.config.timeout)
+        logging.info(f"Stop loss order status: {stop_order_status}")
+        logging.info(f"Profit taker order status: {profit_order_status}")
+
         self.position = self.config.contract_number
-        self.active_orders.extend([entry_order_id, stop_order_id, profit_order_id])
-        self.active_market_orders.extend([entry_order_id])
+        self.active_order_ids.extend([order_id, stop_order_id, profit_order_id])
+        self.active_market_order_id.extend([order_id])
         
         logging.info(f"Entered long position: {self.config.contract_number} contracts at {fill_price}")
         logging.info(f"Entered Stop loss: {stop_price}, Take profit: {profit_price}")
+
+    def _add_contract_to_db(self, contract):
+        """Add contract id to database. The id is only available after entering a position
+        and so must be extracted from the active positions"""
+        positions = self.api.get_positions()
         
+        matching_position = None
+        for position in positions:
+            pos_contract = position['contract']
+            
+            if (pos_contract.symbol == contract.symbol and
+                pos_contract.secType == contract.secType and
+                pos_contract.exchange == contract.exchange and
+                pos_contract.currency == contract.currency and
+                pos_contract.lastTradeDateOrContractMonth == contract.lastTradeDateOrContractMonth):
+                
+                matching_position = pos_contract
+                break
+ 
+        if matching_position:
+            if self.db.add_contract(matching_position):
+                logging.info(f"Successfully added contract {matching_position.conId} to database")
+                return
+            else:
+                msg = "Failed to add contract to database"
+                logging.error(msg)
+                raise Exception(msg)
+        else:
+            msg = f"No matching position found for contract filled contract"
+            raise Exception(msg)
+
+    def _remove_contract_from_db(self, contract):
+        """Remove contract from database"""
+        if hasattr(contract, 'conId'):
+            if self.db.remove_contract(contract.conId):
+                logging.info(f"Successfully removed contract {contract.conId} from database")
+            else:
+                logging.error(f"Failed to remove contract {contract.conId} from database")
+        else:
+            raise AttributeError(f"Contract has no conId: {contract}")
+
     def _close_all_positions(self):
         """Close all open positions"""
         if self.position == 0:
@@ -207,7 +261,7 @@ class TradingSystem:
             logging.error("Failed to close positions")
 
     def _save_config(self):
-        """Save configuration file TO outputs for audit purposes"""
+        """Save configuration file to outputs for audit purposes"""
         # Create output directory if it doesn't exist
         output_dir = os.path.join(os.getcwd(), "output", "config")
         os.makedirs(output_dir, exist_ok=True)

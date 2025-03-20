@@ -10,7 +10,7 @@ from ibapi.common import BarData
 import logging
 import socket
 import pandas as pd
-
+import os
 
 
 class IBConnection(EWrapper, EClient):
@@ -26,6 +26,7 @@ class IBConnection(EWrapper, EClient):
         self.port = port
         self.client_id = client_id
         self.timeout = timeout
+        self.account_id = os.getenv('IBKR_ACCOUNT_ID')
 
         # Order ID and Request ID needed for the IBKR API
         self.next_order_id = None
@@ -325,17 +326,17 @@ class IBConnection(EWrapper, EClient):
         else:
             logging.error(f"Error {error_code}: {error_string}{' ' + str(misc) if misc is not None else ''}")
 
-    def get_positions(self, account: str):
+    def get_positions(self):
         """Get current portfolio positions"""
-        self.positions[account] = []
+        self.positions[self.account_id] = []
         self.reqPositions() 
 
         timeout = self.timeout
-        while not self.positions[account] and timeout > 0:
+        while not self.positions[self.account_id] and timeout > 0:
             time.sleep(0.1)
             timeout -= 0.1
 
-        return self.positions.pop(account, [])
+        return self.positions.pop(self.account_id, [])
     
     def position(self, account: str, contract: Contract, pos: float, avg_cost: float):
         """Callback for position updates"""
@@ -353,7 +354,6 @@ class IBConnection(EWrapper, EClient):
         
         self.reqAccountSummary(req_id, "All", "$LEDGER")
 
-        # Wait for response
         timeout = self.timeout
         while timeout > 0 and not self.account_summary[req_id]:
             time.sleep(0.1)
