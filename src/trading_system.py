@@ -153,7 +153,7 @@ class TradingSystem:
     def _enter_position(self, contract):
         """Enter a new long position"""            
         # Place market order
-        order_id, order_status = self.api.place_market_order(contract, 'BUY', self.config.contract_number)
+        order_id, order_status = self.api.place_market_order(contract, 'BUY', self.config.number_of_contracts)
         if order_status['status'] != 'Filled':
             logging.warning(f"Entry order status: {order_status}. Waiting 10s for fill...")
             time.sleep(10)
@@ -180,20 +180,20 @@ class TradingSystem:
         profit_price = fill_price + (self.config.take_profit_ticks * self.config.mnq_tick_size)
         
         # Place stop loss and take profit orders
-        stop_order_id, stop_order_status = self.api.place_stop_loss_order(contract, order_id, self.config.contract_number, stop_price)
-        profit_order_id, profit_order_status = self.api.place_profit_taker_order(contract, order_id, self.config.contract_number, profit_price)
+        stop_order_id, stop_order_status = self.api.place_stop_loss_order(contract, order_id, self.config.number_of_contracts, stop_price)
+        profit_order_id, profit_order_status = self.api.place_profit_taker_order(contract, order_id, self.config.number_of_contracts, profit_price)
         
         time.sleep(self.config.timeout)
         logging.info(f"Stop loss order status: {stop_order_status}")
         logging.info(f"Profit taker order status: {profit_order_status}")
 
         # Tracking active orders
-        self.position = self.config.contract_number
+        self.position = self.config.number_of_contracts
         self.active_order_ids.extend([order_id, stop_order_id, profit_order_id])
         self.active_market_order_id.extend([order_id])
         self._add_contract_to_db(contract)  
         
-        logging.info(f"Entered long position: {self.config.contract_number} contracts at {fill_price}")
+        logging.info(f"Entered long position: {self.config.number_of_contracts} contracts at {fill_price}")
         logging.info(f"Entered Stop loss: {stop_price}, Take profit: {profit_price}")
 
     def _add_contract_to_db(self, contract):

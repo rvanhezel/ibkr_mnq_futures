@@ -21,7 +21,7 @@ class Configuration:
         self.ticker = self.config.get('Trading', 'ticker')
         self.order_type = self.config.get('Trading', 'order_type')
         self.exchange = self.config.get('Trading', 'exchange')
-        self.contract_number = self._check_contract_number(self.config.getint('Trading', 'contract_number'))
+        self.number_of_contracts = self._check_contract_number(self.config.getint('Trading', 'number_of_contracts'))
         self.currency = self.config.get('Trading', 'currency')
         self.trading_start_time = self.config.get('Trading', 'trading_start_time')
         self.trading_end_time = self.config.get('Trading', 'trading_end_time')
