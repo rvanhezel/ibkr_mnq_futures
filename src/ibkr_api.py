@@ -11,6 +11,7 @@ import logging
 import socket
 import pandas as pd
 import os
+from src.portfolio.trading_order import TradingOrder
 
 
 class IBConnection(EWrapper, EClient):
@@ -235,6 +236,37 @@ class IBConnection(EWrapper, EClient):
         # logging.info(f"Historical data end: {reqId}, {start}, {end}")
         pass
 
+    def place_trading_order(self, trading_order: TradingOrder):
+        """Place a trading order"""
+        order = Order()
+        order.action = trading_order.action
+        order.totalQuantity = trading_order.quantity
+        order.orderType = trading_order.order_type
+        
+        order.parentId = trading_order.parent_order_id
+        order.auxPrice = trading_order.aux_price
+
+        contract = Contract()
+        contract.symbol = trading_order.ticker
+        contract.secType = trading_order.security
+        contract.exchange = trading_order.exchange
+        contract.currency = trading_order.currency
+        contract.lastTradeDateOrContractMonth = trading_order.expiry
+        
+        order_id = self.next_order_id
+        self.next_order_id += 1
+        
+        self.order_statuses[order_id] = {}
+        self.placeOrder(order_id, contract, order)
+
+        timeout = self.timeout
+        while not self.order_statuses[order_id] and timeout > 0:
+            time.sleep(0.1)
+            timeout -= 0.1
+
+        trading_order.update_post_fill(status=self.order_statuses[order_id]['status'], order_id=order_id)
+
+
     def place_market_order(self, contract, action, quantity):
         """Place a market order"""
         order = Order()
@@ -275,6 +307,10 @@ class IBConnection(EWrapper, EClient):
     def get_order_status(self, order_id: int) -> dict:
         """Get the current status of an order"""
         return self.order_statuses.get(order_id, None)
+    
+    def update_order_status(self, order: TradingOrder):
+        """Update the status of an order"""
+        order.status = self.get_order_status(order.order_id)['status']
 
     def place_stop_loss_order(self, contract, parent_order_id, quantity, stop_price):
         """Place a stop-loss order"""
