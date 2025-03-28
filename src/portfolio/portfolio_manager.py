@@ -187,11 +187,8 @@ class PortfolioManager:
         stop_loss_price = mid_price - (self.config.stop_loss_ticks * self.config.mnq_tick_size)
         take_profit_limit_price = mid_price + (self.config.take_profit_ticks * self.config.mnq_tick_size)
 
-        # stop_loss_price = round(stop_loss_price, 2)
-        # take_profit_limit_price = round(take_profit_limit_price, 2)
-        
-        stop_loss_price = 19960.041
-        take_profit_limit_price = 20000.041
+        stop_loss_price = round(stop_loss_price/self.config.mnq_tick_size) * self.config.mnq_tick_size
+        take_profit_limit_price = round(take_profit_limit_price/self.config.mnq_tick_size) * self.config.mnq_tick_size
 
         logging.debug(f"STP price: {stop_loss_price}, LMT price: {take_profit_limit_price}")
 
@@ -203,8 +200,17 @@ class PortfolioManager:
         
         self.api.place_orders(bracket, contract)
 
-        self.orders.append(list(zip(bracket, [False] * len(bracket))))
-        # To do: add orders to db
+        if all(self.api.order_statuses[order.orderId] for order in bracket):
+            # This means all orders were accepted by the API
+            logging.info("All orders were accepted by the API.")
+            self.orders.append(list(zip(bracket, [False] * len(bracket))))
+            # To do: add orders to db
+
+        else:
+            logging.error("Failed to place all orders.")
+            for order in bracket:
+                logging.info(f"Cancelling order {order.orderId} of type {order.orderType}")
+                self.api.cancel_order(order.orderId)
 
     def has_pending_orders(self):
         for bracket_order in self.orders:

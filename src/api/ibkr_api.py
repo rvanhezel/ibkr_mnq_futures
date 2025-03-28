@@ -6,6 +6,7 @@ from ibapi.client import EClient
 from ibapi.wrapper import EWrapper, OrderState
 from ibapi.contract import Contract
 from ibapi.order import Order
+from ibapi.order_cancel import OrderCancel
 from ibapi.common import BarData
 import logging
 import socket
@@ -338,8 +339,15 @@ class IBConnection(EWrapper, EClient):
         return order_id, self.order_statuses[order_id]
 
     def error(self, req_id, error_code, error_string, misc=None):
+
         if error_code in [2103, 2104, 2105, 2106, 2119, 2158]:
             logging.info(f"({error_code}) {error_string}{' ' + str(misc) if misc is not None else ''}")
+
+        elif error_code == 110:
+            msg = f"Error {error_code}: Submitted prices must be rounded to 2 decimal places."
+            msg += f"\n Please check TWS and Discard/Delete any related orders with a 'Transmit' status."
+            logging.error(msg)
+
         else:
             logging.error(f"Error {error_code}: {error_string}{' ' + str(misc) if misc is not None else ''}")
 
@@ -578,6 +586,6 @@ class IBConnection(EWrapper, EClient):
 
     def cancel_order(self, order_id: int):
         """Cancel a specific order by its ID. OrderStatus callback is used"""
-        self.cancelOrder(order_id)
+        self.cancelOrder(order_id, OrderCancel())
   
 
