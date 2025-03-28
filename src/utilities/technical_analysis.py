@@ -6,6 +6,7 @@ from ta.momentum import RSIIndicator
 
 
 class TechnicalAnalysis:
+    
     def __init__(self, config):
         """
         Initialize TechnicalAnalysis with configuration parameters
@@ -43,24 +44,12 @@ class TechnicalAnalysis:
         
     def calculate_indicators(self, historical_data):
         """Calculate Bollinger Bands and RSI for the given historical data"""
-        # Convert IB historical data to pandas DataFrame
-        df = pd.DataFrame({
-            'datetime': [bar.date for bar in historical_data],
-            'open': [bar.open for bar in historical_data],
-            'high': [bar.high for bar in historical_data],
-            'low': [bar.low for bar in historical_data],
-            'close': [bar.close for bar in historical_data],
-            'volume': [bar.volume for bar in historical_data]
-        })
-        
         # Calculate Bollinger Bands
-        bb_data = self.calculate_bollinger_bands(close_prices=df['close'])
+        bb_data = self.calculate_bollinger_bands(close_prices=historical_data['close'])
         
-        df['bb_middle'] = bb_data['middle']
-        df['bb_upper'] = bb_data['upper']
-        df['bb_lower'] = bb_data['lower']
+        historical_data.loc[:, 'bb_middle'] = bb_data['middle']
+        historical_data.loc[:, 'bb_upper'] = bb_data['upper']
+        historical_data.loc[:, 'bb_lower'] = bb_data['lower']
         
         # Calculate RSI
-        df['rsi'] = self.calculate_rsi(close_prices=df['close'])
-        
-        return df 
+        historical_data.loc[:, 'rsi'] = self.calculate_rsi(close_prices=historical_data['close'])

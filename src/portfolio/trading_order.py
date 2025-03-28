@@ -1,5 +1,5 @@
 import pandas as pd
-from ibkr_api import Contract
+from ibapi.contract import Contract
 
 
 class TradingOrder:
@@ -8,28 +8,31 @@ class TradingOrder:
             order_type,
             action,
             quantity,
-            contract, 
+            contract: Contract, 
             order_id, 
             status, 
             timezone, 
             parent_order_id=None,
-            aux_price=None):
+            aux_price=None,
+            transmit=True):
         self.order_type = order_type # MKT, STP, LMT
         self.action = action # BUY, SELL
         self.quantity = quantity
 
-        self.ticker = contract.ticker
-        self.security = contract.security
-        self.exchange = contract.exchange
+        self.symbol = contract.symbol
+        self.security = contract.secType
+        self.exchange = contract.exchange   
         self.currency = contract.currency
-        self.expiry = contract.expiry
+        self.expiry = contract.lastTradeDateOrContractMonth
 
         self.order_id = order_id
         self.parent_order_id = parent_order_id
         self.aux_price = aux_price
+        self.transmit = transmit
 
         self.status = status
-        self.time_sent = pd.Timestamp.now(tz=timezone)
+        self.timezone = timezone
+        self.time_sent = pd.Timestamp.now(tz=self.timezone)
         self.time_filled = None
 
     def update_post_fill(self, status=None, order_id=None):
@@ -38,11 +41,37 @@ class TradingOrder:
         if status == 'Filled':
             self.time_filled = pd.Timestamp.now(tz=self.timezone)
 
-    def get_contract(self):
-        return Contract(
-            ticker=self.ticker,
-            security=self.security,
-            exchange=self.exchange,
-            currency=self.currency,
-            expiry=self.expiry
+    @property
+    def contract(self):
+        contract = Contract()
+        contract.symbol = self.symbol
+        contract.secType = self.security
+        contract.exchange = self.exchange
+        contract.currency = self.currency
+        contract.lastTradeDateOrContractMonth = self.expiry
+        return contract
+    
+    @contract.setter
+    def contract(self, contract: Contract):
+        raise AttributeError("Contract is read-only")
+
+    def __str__(self):
+        return (
+            f"TradingOrder("
+            f"order_id={self.order_id}, "
+            f"parent_order_id={self.parent_order_id}, "
+            f"order_type='{self.order_type}', "
+            f"action='{self.action}', "
+            f"quantity={self.quantity}, "
+            f"ticker='{self.symbol}', "
+            f"security='{self.security}', "
+            f"exchange='{self.exchange}', "
+            f"currency='{self.currency}', "
+            f"expiry='{self.expiry}', "
+            f"status='{self.status}', "
+            f"time_sent={self.time_sent}, "
+            f"time_filled={self.time_filled}, "
+            f"aux_price={self.aux_price}, "
+            f"transmit={self.transmit}"
+            f")"
         )

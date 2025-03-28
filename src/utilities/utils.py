@@ -8,6 +8,13 @@ import holidays
 import configparser
 
 
+def get_third_friday(year, month, timezone):
+    """Get the third Friday of a given month"""
+    first_day = pd.Timestamp(year, month, 1, tz=timezone)
+    first_friday = first_day + pd.Timedelta(days=(4 - first_day.dayofweek + 7) % 7)
+    third_friday = first_friday + pd.Timedelta(days=14)
+    return third_friday
+
 def load_config(config_path: str):
     config = configparser.ConfigParser()
     return config.read(config_path)

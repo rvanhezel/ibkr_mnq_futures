@@ -4,6 +4,7 @@ import configparser
 import logging
 from datetime import datetime
 import pytz
+from src.utilities.period import Period
 
 
 class Configuration:
@@ -27,8 +28,7 @@ class Configuration:
         self.trading_end_time = self.config.get('Trading', 'trading_end_time')
         self.timezone = self.config.get('Trading', 'timezone')
         self.roll_contract_days_before = self.config.getint('Trading', 'roll_contract_days_before')
-        self.resubmit_cancelled_market_orders = self.config.getboolean('Trading', 'resubmit_cancelled_market_orders')
-        self.resubmit_cancelled_bracket_orders = self.config.getboolean('Trading', 'resubmit_cancelled_bracket_orders')
+        self.resubmit_cancelled_order = self.config.getboolean('Trading', 'resubmit_cancelled_order')
 
         # Risk Management section
         self.stop_loss_ticks = self.config.getfloat('Risk_Management', 'stop_loss_ticks')
@@ -40,8 +40,8 @@ class Configuration:
         # Market Data section
         self.mnq_tick_size = self.config.getfloat('Market_Data', 'mnq_tick_size')
         self.mnq_point_value = self.config.getfloat('Market_Data', 'mnq_point_value')
-        self.bar_size = self.config.get('Market_Data', 'bar_size')
-        self.horizon = self.config.get('Market_Data', 'horizon')
+        self.bar_size = Period(self.config.get('Market_Data', 'bar_size'))
+        self.horizon = Period(self.config.get('Market_Data', 'horizon'))
 
         # API section
         self.api = self.config.get('API', 'API')

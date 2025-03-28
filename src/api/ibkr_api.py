@@ -3,7 +3,7 @@ import threading
 import time
 import pytz
 from ibapi.client import EClient
-from ibapi.wrapper import EWrapper
+from ibapi.wrapper import EWrapper, OrderState
 from ibapi.contract import Contract
 from ibapi.order import Order
 from ibapi.common import BarData
@@ -12,6 +12,7 @@ import socket
 import pandas as pd
 import os
 from src.portfolio.trading_order import TradingOrder
+from src.utilities.utils import get_third_friday
 
 
 class IBConnection(EWrapper, EClient):
@@ -40,12 +41,15 @@ class IBConnection(EWrapper, EClient):
         self.account_summary = {}
         self.position_data = {}
         self.order_statuses = {}
+        self.open_orders = {}
 
-        self.current_contract = None
+        # self.current_contract = None
         self.connected = False
+        self.open_orders_requested = False
 
         # Lock to ensure thread-safe operations for tracking request ids
         self.lock = threading.Lock()
+
 
     def connect(self):
         """Connect to Interactive Brokers TWS/Gateway"""
@@ -92,45 +96,6 @@ class IBConnection(EWrapper, EClient):
         with self.lock:
             self.next_req_id += 1
             return self.next_req_id
-
-    def get_current_contract(self, ticker, exchange, ccy):
-        """Get the current active MNQ futures contract"""
-        if self.current_contract is None:
-            self.current_contract = self._get_active_contract(ticker, exchange, ccy)
-        return self.current_contract
-
-    def _get_active_contract(self, ticker, exchange, ccy):
-        """Determine the active contract based on current date"""
-        today = datetime.datetime.now(pytz.UTC)
-        
-        # Contract months (March, June, September, December)
-        contract_months = [3, 6, 9, 12]
-        
-        # Find the next contract month
-        current_month = today.month
-        current_year = today.year
-        
-        next_contract_month = None
-        next_contract_year = current_year
-        
-        for month in contract_months:
-            if month > current_month:
-                next_contract_month = month
-                break
-        
-        if next_contract_month is None:
-            next_contract_month = contract_months[0]  # March
-            next_contract_year += 1
-
-        # Create the contract
-        contract = Contract()
-        contract.symbol = ticker
-        contract.secType = "FUT"
-        contract.exchange = exchange
-        contract.currency = ccy
-        contract.lastTradeDateOrContractMonth = f"{next_contract_year}{next_contract_month:02d}"
-
-        return contract
     
     def get_contract_details(self, contract):
         """Get contract details for a specific contract"""
@@ -153,37 +118,37 @@ class IBConnection(EWrapper, EClient):
         """Callback for contract details"""
         self.contract_details[reqId] = contractDetails
 
-    def should_rollover(self, days_before_expiry):
-        """Check if it's time to roll over to the next contract"""
-        if not self.current_contract:
-            return True
+    # def should_rollover(self, days_before_expiry):
+    #     """Check if it's time to roll over to the next contract"""
+    #     if not self.current_contract:
+    #         return True
 
-        req_id = self.get_next_req_id()
-        self.contract_details.clear()
-        self.reqContractDetails(req_id, self.current_contract)
+    #     req_id = self.get_next_req_id()
+    #     self.contract_details.clear()
+    #     self.reqContractDetails(req_id, self.current_contract)
 
-        # Wait for contract details
-        timeout = self.timeout
-        while req_id not in self.contract_details and timeout > 0:
-            time.sleep(0.1)
-            timeout -= 0.1
+    #     # Wait for contract details
+    #     timeout = self.timeout
+    #     while req_id not in self.contract_details and timeout > 0:
+    #         time.sleep(0.1)
+    #         timeout -= 0.1
 
-        if req_id not in self.contract_details:
-            return True
+    #     if req_id not in self.contract_details:
+    #         return True
 
-        details = self.contract_details[req_id]
-        expiry = datetime.datetime.strptime(details.contract.lastTradeDateOrContractMonth, '%Y%m%d')
-        expiry = pytz.timezone('US/Eastern').localize(expiry)
+    #     details = self.contract_details[req_id]
+    #     expiry = datetime.datetime.strptime(details.contract.lastTradeDateOrContractMonth, '%Y%m%d')
+    #     expiry = pytz.timezone('US/Eastern').localize(expiry)
         
-        now = datetime.datetime.now(pytz.timezone('US/Eastern'))
-        days_to_expiry = (expiry - now).days
+    #     now = datetime.datetime.now(pytz.timezone('US/Eastern'))
+    #     days_to_expiry = (expiry - now).days
         
-        return days_to_expiry <= days_before_expiry
+    #     return days_to_expiry <= days_before_expiry
 
-    def rollover_contract(self, ticker, exchange, ccy):
-        """Roll over to the next contract"""
-        self.current_contract = None
-        return self.get_current_contract(ticker, exchange, ccy)
+    # def rollover_contract(self, ticker, exchange, ccy):
+    #     """Roll over to the next contract"""
+    #     self.current_contract = None
+    #     return self.get_current_contract(ticker, exchange, ccy)
 
     def get_historical_data(self, contract, duration='1 D', bar_size='1 min'):
         """Get historical data for the current contract"""
@@ -238,16 +203,29 @@ class IBConnection(EWrapper, EClient):
 
     def place_trading_order(self, trading_order: TradingOrder):
         """Place a trading order"""
+        logging.info(f"Placing trading order: {trading_order}")
+        
         order = Order()
         order.action = trading_order.action
         order.totalQuantity = trading_order.quantity
         order.orderType = trading_order.order_type
-        
-        order.parentId = trading_order.parent_order_id
-        order.auxPrice = trading_order.aux_price
+        order.transmit = trading_order.transmit
+
+
+        if order.orderType == "LMT":
+            order.lmtPrice = trading_order.aux_price
+            
+        elif order.orderType == "STP":
+            order.auxPrice = trading_order.aux_price
+            order.outsideRth = True
+
+        elif order.orderType == "MKT":
+            pass
+        else:
+            raise TypeError(f"Invalid order type: {order.orderType}")
 
         contract = Contract()
-        contract.symbol = trading_order.ticker
+        contract.symbol = trading_order.symbol
         contract.secType = trading_order.security
         contract.exchange = trading_order.exchange
         contract.currency = trading_order.currency
@@ -255,6 +233,8 @@ class IBConnection(EWrapper, EClient):
         
         order_id = self.next_order_id
         self.next_order_id += 1
+
+        order.orderId = order_id
         
         self.order_statuses[order_id] = {}
         self.placeOrder(order_id, contract, order)
@@ -264,7 +244,7 @@ class IBConnection(EWrapper, EClient):
             time.sleep(0.1)
             timeout -= 0.1
 
-        trading_order.update_post_fill(status=self.order_statuses[order_id]['status'], order_id=order_id)
+        trading_order.update_post_fill(status=self.order_statuses[order_id].get('status', None), order_id=order_id)
 
 
     def place_market_order(self, contract, action, quantity):
@@ -292,8 +272,7 @@ class IBConnection(EWrapper, EClient):
                    parentId: int, lastFillPrice: float, clientId: int,
                    whyHeld: str, mktCapPrice: float):
         """Callback for order status updates"""
-        if orderId in self.order_statuses:
-            self.order_statuses[orderId].update({
+        self.order_statuses[orderId] = {
                 'status': status,
                 'filled': filled,
                 'remaining': remaining,
@@ -301,8 +280,10 @@ class IBConnection(EWrapper, EClient):
                 'last_fill_price': lastFillPrice,
                 'parent_id': parentId,
                 'why_held': whyHeld,
-                'mkt_cap_price': mktCapPrice
-            })
+                'mkt_cap_price': mktCapPrice,
+                'perm_id': permId,
+                'client_id': clientId
+        }
 
     def get_order_status(self, order_id: int) -> dict:
         """Get the current status of an order"""
@@ -310,7 +291,7 @@ class IBConnection(EWrapper, EClient):
     
     def update_order_status(self, order: TradingOrder):
         """Update the status of an order"""
-        order.status = self.get_order_status(order.order_id)['status']
+        order.status = self.get_order_status(order.order_id).get('status', None)
 
     def place_stop_loss_order(self, contract, parent_order_id, quantity, stop_price):
         """Place a stop-loss order"""
@@ -406,11 +387,11 @@ class IBConnection(EWrapper, EClient):
                 'currency': currency
             }
 
-    def req_position_pnl(self, contract_id, account):
+    def req_position_pnl(self, contract_id):
         """Request PnL for a specific position"""
         req_id = self.get_next_req_id()
         self.pnl_data[req_id] = None
-        self.reqPnLSingle(req_id, account, "", contract_id)
+        self.reqPnLSingle(req_id, self.account_id, "", contract_id)
 
         # Wait for response
         timeout = self.timeout
@@ -435,7 +416,7 @@ class IBConnection(EWrapper, EClient):
                 'daily_pnl': dailyPnL,
                 'unrealized_pnl': unrealizedPnL,
                 'realized_pnl': realizedPnL,
-                'value': value
+                'marketvalue': value
             }
 
     def cancel_pnl_request(self, req_id):
@@ -449,3 +430,154 @@ class IBConnection(EWrapper, EClient):
         for req_id in self.pnl_data:
             self.cancelPnLSingle(req_id)
             del self.pnl_data[req_id]
+
+    def get_latest_mid_price(self, contract, delayed=False):
+        """Get the latest mid price for a contract
+        
+        Args:
+            contract (Contract): The contract to get the mid price for
+            delayed (bool): Whether to use delayed market data
+            
+        Returns:
+            float: The latest mid price, or None if not available
+        """
+        req_id = self.get_next_req_id()
+        self.market_data = {}
+        
+        # Request market data with appropriate generic tick list
+        if delayed:
+            # For futures, use tick type 587 for delayed price
+            self.reqMktData(req_id, contract, "587", False, False, [])
+        else:
+            self.reqMktData(req_id, contract, "", False, False, [])
+        
+        # Wait for market data
+        timeout = self.timeout
+        while req_id not in self.market_data and timeout > 0:
+            time.sleep(0.1)
+            timeout -= 0.1
+            
+        if req_id in self.market_data:
+            data = self.market_data[req_id]
+            # Calculate mid price from bid and ask
+            if data.get('bid') is not None and data.get('ask') is not None:
+                mid_price = (data['bid'] + data['ask']) / 2
+                # Cancel market data subscription
+                self.cancelMktData(req_id)
+                return mid_price
+            # If no bid/ask, try to use last price
+            elif data.get('last') is not None:
+                self.cancelMktData(req_id)
+                return data['last']
+                
+        # Cancel market data subscription if we haven't already
+        self.cancelMktData(req_id)
+        return None
+
+    def tickPrice(self, reqId: int, tickType: int, price: float, attrib):
+        """Callback for price updates"""
+        if reqId not in self.market_data:
+            self.market_data[reqId] = {}
+            
+        if tickType == 1:  # Bid
+            self.market_data[reqId]['bid'] = price
+        elif tickType == 2:  # Ask
+            self.market_data[reqId]['ask'] = price
+        elif tickType == 4:  # Last
+            self.market_data[reqId]['last'] = price
+
+
+    def place_orders(self, orders:list[Order], contract:Contract):
+        """Place multiple orders"""
+        for order in orders:
+            self.order_statuses[order.orderId] = {}
+            self.placeOrder(order.orderId, contract, order)
+
+            timeout = self.timeout
+            while not self.order_statuses[order.orderId] and timeout > 0:
+                time.sleep(0.1)
+                timeout -= 0.1
+
+
+    def create_bracket_order(self,
+                             action:str,
+                             quantity:float, 
+                             take_profit_limit_price:float, 
+                             stop_loss_price:float):
+        """Create a bracket order"""
+        parent_order_id = self.next_order_id
+        self.next_order_id += 1
+
+        parent = Order()
+        parent.orderId = parent_order_id
+        parent.action = action
+        parent.orderType = "MKT"
+        parent.totalQuantity = quantity
+        parent.transmit = False
+
+        takeProfit = Order()
+        takeProfit.orderId = self.next_order_id
+        takeProfit.action = "SELL" if action == "BUY" else "BUY"
+        takeProfit.orderType = "LMT"
+        takeProfit.totalQuantity = quantity
+        takeProfit.lmtPrice = take_profit_limit_price
+        takeProfit.parentId = parent_order_id
+        takeProfit.transmit = False
+
+        self.next_order_id += 1
+
+        stopLoss = Order()
+        stopLoss.orderId = self.next_order_id
+        stopLoss.action = "SELL" if action == "BUY" else "BUY" 
+        stopLoss.orderType = "STP"
+        stopLoss.auxPrice = stop_loss_price
+        stopLoss.totalQuantity = quantity
+        stopLoss.parentId = parent_order_id
+        stopLoss.transmit = True
+
+        self.next_order_id += 1
+
+        bracketOrder = [parent, takeProfit, stopLoss]
+        return bracketOrder
+
+    # def get_contract_from_order_id(self, order_id: int) -> Contract:
+    #     req_id = self.get_next_req_id()
+    #     self.open_orders[req_id] = None
+        
+    #     # Request all open orders
+    #     self.reqOpenOrders()
+        
+    #     # Wait for response
+    #     timeout = self.timeout
+    #     while self.order_contracts[req_id] is None and timeout > 0:
+    #         time.sleep(0.1)
+    #         timeout -= 0.1
+            
+    #     return self.order_contracts.get(req_id, {}).get('contract')
+
+    def request_open_orders(self):
+        if not self.open_orders_requested:
+            self.reqOpenOrders()
+            self.open_orders_requested = True
+
+    def get_open_order(self, order_id: int) -> Order:
+        """Get the open order for a specific order ID"""
+        return self.open_orders.get(order_id, None)
+
+    def openOrder(self, orderId: int, contract: Contract, order: Order, orderState: OrderState):
+        """Callback for open orders"""
+        self.open_orders[orderId] = {
+            'contract': contract,
+            'order': order,
+            'order_state': orderState
+            }
+
+    def openOrderEnd(self):
+        """Callback for end of open orders"""
+        pass
+
+    def cancel_order(self, order_id: int):
+        """Cancel a specific order by its ID. OrderStatus callback is used"""
+        self.cancelOrder(order_id)
+  
+

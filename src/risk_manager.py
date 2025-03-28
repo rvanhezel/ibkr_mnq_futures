@@ -15,58 +15,34 @@ class RiskManager:
                  stop_loss_ticks, 
                  take_profit_ticks):        
         self.timezone = timezone
-        self.trading_start = pd.to_datetime(trading_start_time, format='%H%M').time()
-        self.trading_end = pd.to_datetime(trading_end_time, format='%H%M').time()
+        self.trading_start = pd.to_datetime(trading_start_time, format='%H%M').tz_localize(self.timezone).time()
+        self.trading_end = pd.to_datetime(trading_end_time, format='%H%M').tz_localize(self.timezone).time()
         self.max_24h_loss = max_24h_loss
         self.trading_pause_hours = trading_pause_hours
         self.mnq_tick_size = mnq_tick_size
         self.stop_loss_ticks = stop_loss_ticks
         self.take_profit_ticks = take_profit_ticks
 
-        self.trades_history = []
         self.pause_start_time = None
         self.pause_end_time = None
-        
-    def add_trade(self, trade_time, pnl):
-        """Add a trade to the history"""
-        self.trades_history.append({
-            'time': trade_time,
-            'pnl': pnl
-        })
-        self._cleanup_old_trades()
-        
-    def _cleanup_old_trades(self):
-        """Remove trades older than 24 hours"""
-        now = pd.Timestamp.now(tz=self.timezone)
-        cutoff = now - pd.Timedelta(hours=24)
-        
-        self.trades_history = [
-            trade for trade in self.trades_history
-            if trade['time'] > cutoff
-        ]
-        
-    def get_24h_pnl(self):
-        """Calculate total P&L for the last 24 hours"""
-        return sum(trade['pnl'] for trade in self.trades_history)
     
-    def should_pause_trading(self, num_positions, pnl_details):
+    def should_pause_trading(self, pnl):
         """Check if trading should be paused based on daily PnL"""
-        if pnl_details['unrealized_pnl'] <= -self.max_24h_loss * num_positions:
+        if pnl <= -self.max_24h_loss:
             return True
         return False
+    
+    def set_trading_pause_time(self):
+        """Set the start time for trading pause"""
+        self.pause_start_time = pd.Timestamp.now(tz=self.timezone)
+        self.pause_end_time = self.pause_start_time + pd.Timedelta(hours=self.trading_pause_hours)
 
-    def get_pause_end_time(self):
-        """Get the time when trading can resume"""
-        if self.pause_start is None:
-            return None
-        return self.pause_start + pd.Timedelta(hours=self.trading_pause_hours)
-
-    def can_resume_trading(self):
+    def can_resume_trading_after_pause(self):
         """Check if trading can resume after pause"""
-        if self.pause_start is None:
+        if self.pause_start_time is None:
             return True
-        pause_end = self.get_pause_end_time()
-        if pd.Timestamp.now(tz=self.timezone) >= pause_end:
+        
+        if pd.Timestamp.now(tz=self.timezone) >= self.pause_end_time:
             self.pause_start = None
             return True
         return False

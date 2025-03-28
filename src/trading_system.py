@@ -3,7 +3,7 @@ from datetime import datetime
 import pytz
 from src.risk_manager import RiskManager
 import logging
-from src.ibkr_api import IBConnection
+from src.api.ibkr_api import IBConnection
 from src.configuration import Configuration
 from src.strategys.bb_rsi_strategy import BollingerBandRSIStrategy
 from src.utilities.enums import Signal
@@ -30,15 +30,9 @@ class TradingSystem:
             cfg.take_profit_ticks)
         self.strategy = BollingerBandRSIStrategy()
         self.config = cfg
-
         self.portfolio_manager = PortfolioManager(cfg, self.api)
 
-        # self.position = 0
-        # self.active_order_ids = []
-        # self.active_market_order_id = []
-        # self.pnl_request_ids = []
-        self.historical_data = pd.DataFrame()
-        # self.open_contract = None
+        self.market_data = pd.DataFrame()
         
         
     def start(self):
@@ -53,7 +47,7 @@ class TradingSystem:
                 logging.info("Live trading mode enabled")
 
             self.api.connect()
-            self.portfolio_manager.populate_from_db()
+            # self.portfolio_manager.populate_from_db()
 
             while True:
 
@@ -75,14 +69,18 @@ class TradingSystem:
 
         finally:
             self.api.disconnect()
-            self._save_historical_data()
+            self._save_market_data()
 
             logging.info("Trading system shut down")
             
             
     def _trading_loop(self):
         """Main trading loop"""
+        loop_sleep_time = 30
+
         while True:
+            logging.info(f"Starting trading loop")
+
             if not self.risk_manager.is_trading_day():
                 logging.warning("Not a trading day. Waiting...")
                 time.sleep(60)
@@ -92,75 +90,86 @@ class TradingSystem:
                 logging.warning("Outside trading hours. Waiting...")
                 time.sleep(60)
                 continue
+            
+            if not self.risk_manager.can_resume_trading_after_pause():
+                logging.warning("Trading paused triggered. Waiting...")
+                time.sleep(60)
+                continue
 
-            self.portfolio_manager.check_order_statuses()
+            # Update or create positions from open orders
+            self.portfolio_manager.update_positions()
+
+            # Check for cancelled market orders and resubmit them if required
+            self.portfolio_manager.check_cancelled_market_order()
+                
+            # Check PnL for trading pause
+            logging.debug("Checking PnL for trading pause.")
+            pnl = self.portfolio_manager.daily_pnl()
+            logging.debug(f"PnL: {pnl}")
+
+            if self.risk_manager.should_pause_trading(pnl):
+                logging.warning(f"PnL: {pnl} is below max 24h loss. Pausing trading.")
+                self.risk_manager.set_trading_pause_time()
+
+                logging.warning(f"Trading paused until {self.risk_manager.pause_end_time}")
+                time.sleep(60)
+                continue
 
             self._check_trading_opportunities()
-                
-            # Check PnL & roll if we have an open position
-            if self.position != 0:
-                pnl_details = self.api.req_position_pnl(self.open_contract.conId, os.getenv('IBKR_ACCOUNT_ID')) 
-                if self.risk_manager.should_pause_trading(self. position, pnl_details):
-                    pause_end = self.risk_manager.get_pause_end_time()
-                    msg = f"Trading paused until {pause_end} due to daily loss threshold breach: {self.risk_manager.get_24h_pnl()}"
-                    logging.warning(msg)
-                    time.sleep(60)
-                    continue
-                
-                # Check contract roll
-                # check closing positions at EOD
-                # check trading pause
 
-                # Check for contract rollover
-                # if self.api.should_rollover(self.config.roll_contract_days_before):
-                #     logging.warning("Rolling over to next contract")
-                #     self._handle_rollover()
+            # Check if it's near end of trading day (3:59 PM or later)
+            current_time = pd.Timestamp.now(tz=self.config.timezone)
+            eod_cutoff = pd.Timestamp(
+                    current_time.year, 
+                    current_time.month, 
+                    current_time.day, 
+                    15, 
+                    59,           
+                    tz=self.config.timezone)
             
-            # Sleep for 1 minute before next iteration
-            time.sleep(60)
+            if current_time >= eod_cutoff:
+                logging.info("End of day approaching - closing all positions and cancelling orders")
+                
+                self.portfolio_manager.cancel_all_orders()
+                self.portfolio_manager.close_all_positions()
+                loop_sleep_time = 5
             
-    def _handle_rollover(self):
-        """Handle contract rollover process"""
-        # Close any existing positions
-        if self.position != 0:
-            self._close_all_positions()
-            
-        # Switch to new contract
-        self.api.rollover_contract(self.config.ticker, self.config.exchange, self.config.currency)
-        logging.info("Rolled over to new contract")
+
+            self._save_market_data()
+
+            logging.info(f"Trading loop complete. Sleeping for {loop_sleep_time} seconds...")
+            time.sleep(loop_sleep_time)
         
     def _check_trading_opportunities(self):
         """Check for trading opportunities based on strategy"""
-        contract = self.api.get_current_contract(
-            self.config.ticker,
-            self.config.exchange,
-            self.config.currency
-        )
-        if not contract:
-            logging.error("No active contract available")
-            return
+        logging.debug("Checking for trading opportunities.")
 
         # Get historical data
-        new_bars_df = self.api.get_historical_data(contract, self.config.duration, self.config.bar_size)
-        if not new_bars_df:
+        contract = self.portfolio_manager.get_current_contract()
+        new_bars_df = self.api.get_historical_data(contract, str(self.config.horizon), str(self.config.bar_size))
+
+        if new_bars_df.empty:
             logging.warning("No historical data available")
             return
         
-        if self.historical_data.empty:
-            self.historical_data = new_bars_df
+        if self.market_data.empty:
+            self.market_data = new_bars_df
         else:
-            self.historical_data = pd.concat([self.historical_data, new_bars_df])
+            self.market_data = pd.concat([self.market_data, new_bars_df])
+            self.market_data = self.market_data[~self.market_data.index.duplicated(keep='last')]
+            self.market_data.sort_index(inplace=True)
 
-            #check this
-            self.historical_data = self.historical_data[~self.historical_data.index.duplicated(keep='last')]
-            self.historical_data.sort_index(inplace=True)
+        logging.info(f"Market data: {self.market_data.tail(10)}")
             
-        signal = self.strategy.generate_signals(self.historical_data, self.config)
+        # signal = self.strategy.generate_signals(self.market_data, self.config)
+        signal = Signal.BUY #for testing
 
-        if (self.portfolio_manager.open_contract_number() == 0 and 
+        logging.info(f"Signal generated: {signal.name}")
+
+        if (self.portfolio_manager.contract_count_from_open_positions() == 0 and 
             not self.portfolio_manager.has_pending_orders() and 
             signal == Signal.BUY):
-            self.portfolio_manager.enter_position(contract)
+            self.portfolio_manager.place_bracket_order()
 
     def _save_config(self):
         """Save configuration file to outputs for audit purposes"""
@@ -176,20 +185,19 @@ class TradingSystem:
         shutil.copy2('run.cfg', filepath)
         logging.info(f"Configuration saved to {filepath}")
 
-    def _save_historical_data(self):
+    def _save_market_data(self):
         """Save historical data to CSV file"""
-        if not self.historical_data.empty:
-            logging.info("Saving historical data to CSV file...")
+        if not self.market_data.empty:
+            logging.info("Saving market data to CSV file...")
 
             # Create output directory if it doesn't exist
-            output_dir = os.path.join(os.getcwd(), "output", "historical_data")
+            output_dir = os.path.join(os.getcwd(), "output")
             os.makedirs(output_dir, exist_ok=True)
             
             # Generate filename with timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"historical_data_{self.config.ticker}_{timestamp}.csv"
+            timestamp = datetime.now().strftime("%Y%m%d")
+            filename = f"market_data_{self.config.ticker}_{timestamp}.csv"
             filepath = os.path.join(output_dir, filename)
             
-            # Save to CSV
-            self.historical_data.to_csv(filepath, index=True)
-            logging.info(f"Historical data saved to {filepath}")
+            self.market_data.to_csv(filepath, index=True)
+            logging.info(f"Market data saved to {filepath}")

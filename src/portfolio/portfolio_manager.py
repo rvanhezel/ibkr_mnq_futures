@@ -1,11 +1,15 @@
 from typing import List, Dict, Optional
+from ibapi.order import Order
+from ibapi.contract import Contract
+import os
 from src.portfolio.position import Position
 from src.portfolio.trading_order import TradingOrder
-from src.ibkr_api import IBConnection
+from src.api.ibkr_api import IBConnection
 from src.configuration import Configuration
 import logging
 import time
 from src.db.database import Database
+from src.api.api_utils import get_current_contract
 
 
 class PortfolioManager:
@@ -13,248 +17,378 @@ class PortfolioManager:
         self.config = config
         self.api = api
 
-        self.db = Database()
+        # self.db = Database()
 
         self.positions: List[Position] = []
-        self.orders: List[TradingOrder] = []
+        self.orders: List[List[(Order, bool)]] = []       #list of bracket orders (list of 3 orders). bool is for whether an order has been resubmitted when cancelled
 
-    def has_pending_orders(self):
-        return any(order.status not in ['Filled', 'ReSubmitted'] for order in self.orders)
+    def update_positions(self):
+        """Update the positions from the API."""
+        logging.info(f"{self.__class__.__name__}: Updating positions from orders.")
+        logging.debug(f"{self.__class__.__name__}: There are {self._total_orders()} orders")
 
-    def open_contract_number(self):
-        return sum(position.quantity for position in self.positions if position.status == "OPEN")
+        for bracket_order in self.orders:
+            for order, _ in bracket_order:
+                logging.info(f"Order: {str(order)}")
+        
+        self.api.request_open_orders()
 
-    def populate_from_db(self):
-        """Populate the portfolio from the database"""
-        self.positions = self.db.get_positions()
-        self.orders = self.db.get_orders()
+        if len(self.orders) > 0:
+            filled_count, cancelled_count, pending_count = self._get_order_status_count()
+            logging.debug(f"Order statuses: {filled_count} filled, {cancelled_count} cancelled, {pending_count} pending")
 
-    def check_order_statuses(self):
-        """Check the status of all orders and positions"""
-        for order in self.orders:
-            if order.status != 'Filled' and order.status != 'Cancelled' and order.status != 'ReSubmitted':
-                logging.warning(f"Order type: {order.order_type}, id:{order.order_id}, not filled. Checking status...")
-                self.api.update_order_status(order)
+        for bracket_idx, bracket_order in enumerate(self.orders):
+            
+            for order_idx, (order, already_handled) in enumerate(bracket_order):
+                
+                order_status = self.api.get_order_status(order.orderId)
+                order_details = self.api.get_open_order(order.orderId)
 
-                if order.status == 'Filled':
+                contract = order_details['contract']
 
-                    if order.order_type == 'MKT':
-                        """We have a previously unfilled market order.
-                        We need to place a bracket order for risk mgmt.
-                        The order must be updated in the bd as well"""
-                        logging.info(f"Order type: {order.order_type}, id:{order.order_id}, filled. Placing bracket order...")
+                if order_status['status'] == 'Filled' and not already_handled:
+                    
+                    if order.orderType == 'MKT' and order.action == 'BUY':
 
-                        position, stop_loss_order, take_profit_order = self._place_bracket_order(order)
-                        self.db.add_position(position)
-                        self.positions.append(position)
+                        if len(self.positions) == 0:
+                            logging.info(f"Buy order filled, creating new position.")
 
-                        self.db.add_order(stop_loss_order)
-                        self.db.add_order(take_profit_order)
+                            position = Position(
+                            ticker=contract.symbol,
+                            security=contract.secType,
+                            currency=contract.currency,
+                            expiry=contract.lastTradeDateOrContractMonth,
+                            contract_id=contract.conId,
+                            quantity=int(order.totalQuantity),
+                            avg_price=order_status['avg_fill_price'],
+                            timezone=self.config.timezone,
+                            stop_loss_price=None,
+                            take_profit_price=None
+                            )
 
-                        self.orders.append(stop_loss_order)
-                        self.orders.append(take_profit_order)
+                            self.positions.append(position)
+                            # # self.db.add_position(position)
 
-                        self.db.update_order(order)
+                            self.orders[bracket_idx][order_idx] = (order, True)
 
-                    elif order.order_type == 'LMT' or order.order_type == 'STP':
-                        """We have a previously unfilled limit or stop order. The stop loss and take
-                        profit details in the positions are still correct so no changes are needed, just update the DB"""
-                        logging.info(f"Order type: {order.order_type}, id:{order.order_id}, now filled, updating DB")
-                        self.db.update_order(order)
+                        else:
+                            logging.info(f"Buy order filled, updating position.")
+
+                            position = self.positions[0]
+
+                            total_quantity = position.quantity + int(order.totalQuantity)
+                            avg_price = position.quantity * position.avg_price
+                            avg_price += int(order.totalQuantity) * order_status['avg_fill_price'] 
+                            avg_price /= total_quantity
+
+                            position.quantity = total_quantity
+                            position.avg_price = avg_price
+
+                            self.orders[bracket_idx][order_idx] = (order, True)
+                            
+                            # update position in db
+
+                    elif order.orderType == 'MKT' and order.action == 'SELL':
+
+                        logging.info(f"Market sell order filled, updating position.")
+
+                        position = self.positions[0]
+
+                        total_quantity = position.quantity - int(order.totalQuantity)
+                        avg_price = position.quantity * position.avg_price
+                        avg_price += int(order.totalQuantity) * order_status['avg_fill_price'] 
+                        avg_price /= (position.quantity + int(order.totalQuantity))
+
+                        position.quantity = total_quantity
+                        position.avg_price = avg_price
+                        
+                        self.orders[bracket_idx][order_idx] = (order, True)
+
+                        # update position in db
+
+                    elif order.orderType == 'STP' or order.orderType == 'LMT' and order.action == 'SELL':
+
+                        logging.info(f"{order.orderType} order filled, updating position.")
+
+                        position = self.positions[0]
+
+                        total_quantity = position.quantity - int(order.totalQuantity)
+                        avg_price = position.quantity * position.avg_price
+                        avg_price += int(order.totalQuantity) * order_status['avg_fill_price'] 
+                        avg_price /= (position.quantity + int(order.totalQuantity))
+
+                        position.quantity = total_quantity
+                        position.avg_price = avg_price
+
+                        self.orders[bracket_idx][order_idx] = (order, True)
+
+                        # update position in db
 
                     else:
-                        raise TypeError("Unsupported order type. Please check.")
+
+                        raise TypeError(f"Order type {order.orderType} with action {order.action} is not supported.")
+        
+        msg = f"{self.__class__.__name__}: Finished updating positions from orders."
+        msg += f" Currently {len(self.positions)} position(s)."
+
+        logging.info(msg)
+        if len(self.positions) > 0:
+            for position in self.positions:
+                logging.info(str(position))
+
+    def daily_pnl(self):
+        """Update the daily PnL. The daily pnl is made up from the PnL of all filled orders."""
+        pnl = 0
+
+        for bracket_order in self.orders:
+            # a backet order only hits pnl if 2 out of 3 orders are filled
+            # so we need to check the status of each order
+            # and then sum the pnl of the filled orders
+
+            filled_count = 0
+            current_order_pnl = 0
+
+            for order, _ in bracket_order:
+
+                order_status = self.api.get_order_status(order.orderId)
+
+                if order_status['status'] == 'Filled':
                     
-            elif order.status == 'Cancelled':
+                    if order.orderType == 'STP' or order.orderType == 'LMT' and order.action == 'SELL':
 
-                if order.order_type == 'MKT':
-                    # A market order was cancelled also meaning it was never filled and so no position was entered.
-                    logging.warning(f"Order type: {order.order_type}, id:{order.order_id}, was cancelled.")
+                        current_order_pnl += order_status['avg_fill_price'] * int(order_status['filled'])
 
-                    if self.config.resubmit_cancelled_market_orders:
-                        logging.info(f"Resubmitting order type: {order.order_type}, id:{order.order_id}.")
-                        order.status = 'ReSubmitted'
-                        self.db.update_order(order)
+                    elif order.orderType == 'MKT' and order.action == 'BUY':
 
-                        self.enter_position(order.get_contract())
+                        current_order_pnl -= order_status['avg_fill_price'] * int(order_status['filled'])
 
-                elif order.order_type == 'LMT' or order.order_type == 'STP':
-                    # A limit or stop order was cancelled. This means a long order was entered, a position taken but
-                    # and the bracket order was never filled. We need to try filling the bracket order again and update the DB 
-                    # and position
-                    logging.warning(f"Order type: {order.order_type}, id:{order.order_id}, was cancelled.")
+                    elif order.orderType == 'MKT' and order.action == 'SELL':
 
-                    if self.config.resubmit_cancelled_bracket_orders:
-                        logging.warning(f"Resubmitting order type: {order.order_type}, id:{order.order_id}...")
-                        
-                        order.status = 'ReSubmitted'
-                        self.db.update_order(order)
+                        current_order_pnl += order_status['avg_fill_price'] * int(order_status['filled'])
 
-                        self.api.place_trading_order(order)
-                        self.orders.append(order)
-                        self.db.add_order(order)
+                    else:
 
-                else:
-                    raise TypeError("Unsupported order type. Please check.")
+                        raise TypeError(f"Order type {order.orderType} with action {order.action} is not supported.")
+                    
+                    filled_count += 1
                 
-            elif order.status == 'ReSubmitted':
-                logging.debug(f"Resubmitted order.")
+            if filled_count >= 2:
+                pnl += current_order_pnl
+
+        return pnl
+
+    def place_bracket_order(self):
+        """Place a bracket order"""
+        logging.debug("Placing bracket order.")
+        contract = self.get_current_contract()
+
+        mid_price = self.api.get_latest_mid_price(contract)
+
+        stop_loss_price = mid_price - (self.config.stop_loss_ticks * self.config.mnq_tick_size)
+        take_profit_limit_price = mid_price + (self.config.take_profit_ticks * self.config.mnq_tick_size)
+
+        # stop_loss_price = round(stop_loss_price, 2)
+        # take_profit_limit_price = round(take_profit_limit_price, 2)
+        
+        stop_loss_price = 19960.041
+        take_profit_limit_price = 20000.041
+
+        logging.debug(f"STP price: {stop_loss_price}, LMT price: {take_profit_limit_price}")
+
+        bracket = self.api.create_bracket_order(
+            "BUY", 
+            self.config.number_of_contracts, 
+            take_profit_limit_price, 
+            stop_loss_price)
+        
+        self.api.place_orders(bracket, contract)
+
+        self.orders.append(list(zip(bracket, [False] * len(bracket))))
+        # To do: add orders to db
+
+    def has_pending_orders(self):
+        for bracket_order in self.orders:
+
+            for order, _ in bracket_order:
+
+                order_status = self.api.order_statuses[order.orderId]['status']
+
+                if (order.orderType == 'MKT' and 
+                    order_status != 'Filled' and
+                    order_status != 'Cancelled'):
+
+                    return True
+                
+        return False
+
+    def contract_count_from_open_positions(self):
+        return sum(position.quantity for position in self.positions if position.status == "OPEN")
+
+    # def populate_from_db(self):
+    #     """Populate the portfolio from the database"""
+    #     self.positions = self.db.get_positions()
+    #     self.orders = self.db.get_orders()
+
+    def check_cancelled_market_order(self):
+        """Check for cancelled market orders and resubmit them if required."""
+        logging.debug("Checking for cancelled market orders.")
+
+        found_cancelled_order = False
+
+        for bracket_order in self.orders:
+
+            for order, already_resubmitted in bracket_order:
+
+                order_status = self.api.order_statuses[order.orderId]['status']
+
+                if (not already_resubmitted and 
+                    order.orderType == 'MKT' and
+                    order_status == "Cancelled"):
+
+                    logging.warning(f"Order type: {order.order_type}, id:{order.order_id}, was cancelled.")
+                    found_cancelled_order = True
+
+                    if self.config.resubmit_cancelled_order:
+
+                        logging.info(f"Resubmitting order type: {order.order_type}, id:{order.order_id}.")
+                        already_resubmitted = True
+
+                        order_details = self.api.get_open_order(order.orderId)
+
+                        self.place_bracket_order(order_details['contract'])
+
+                    else:
+                        logging.info(f"Not resubmitting cancelled order type: {order.order_type}, id:{order.order_id}.")
+
+        if not found_cancelled_order:
+            logging.debug("No cancelled orders found.")
+
+    # def _get_ibkr_position_from_contract(self, contract: Contract):
+    #     """Find the position that corresponds to the passed order by matching contract attributes.
+        
+    #     Args:
+    #         trading_order (TradingOrder): The order to find a matching position for
+            
+    #     Returns:
+    #         dict: The matching position from the API, or None if no match is found
+            
+    #     Raises:
+    #         Exception: If no matching position is found
+    #     """
+    #     positions = self.api.get_positions()
+        
+    #     matching_positions = []
+    #     for position in positions:
+    #         pos_contract = position['contract']
+            
+    #         # Match all relevant contract attributes
+    #         if (pos_contract.symbol == contract.symbol and
+    #             pos_contract.secType == contract.secType and
+    #             pos_contract.exchange == contract.exchange and
+    #             pos_contract.currency == contract.currency and
+    #             pos_contract.lastTradeDateOrContractMonth == contract.lastTradeDateOrContractMonth):
+                
+    #             matching_positions.append(position)
+        
+    #     if len(matching_positions) > 1:
+    #         logging.warning(f"Found multiple matching positions for contract.")
+    #         return matching_positions[0]
+        
+    #     elif len(matching_positions) == 1:
+    #         return matching_positions[0]
+        
+    #     else:
+    #         msg = f"No matching position found for contract."
+    #         logging.error(msg)
+    #         raise Exception(msg)
+        
+    def get_current_contract(self): 
+        """Get the current contract"""
+        return get_current_contract(
+            self.config.ticker,
+            self.config.exchange,
+            self.config.currency,
+            self.config.roll_contract_days_before,
+            self.config.timezone)
+    
+    def _get_order_status_count(self):
+        filled_count = 0
+        cancelled_count = 0
+        total_orders = 0
+        
+        for bracket_order in self.orders:
+
+            total_orders += len(bracket_order)
+
+            for order, _ in bracket_order:
+
+                status = self.api.get_order_status(order.orderId)['status']
+                if status == 'Filled':
+                    filled_count += 1
+                elif status == 'Cancelled':
+                    cancelled_count += 1
+
+        pending_count = total_orders - filled_count - cancelled_count
+        return filled_count, cancelled_count, pending_count
+
+    def cancel_all_orders(self):
+        """Cancel all unfilled and non-cancelled orders."""
+        logging.info("Cancelling all active orders.")
+        
+        for bracket_order in self.orders:
+
+            for order, _ in bracket_order:
+            
+                order_status = self.api.get_order_status(order.orderId)
+                
+                if order_status['status'] not in ['Filled', 'Cancelled']:
+                    logging.info(f"Cancelling order {order.orderId} of type {order.orderType}")
+                    self.api.cancel_order(order.orderId)
+                
+        # # Wait a moment for orders to be cancelled
+        # time.sleep(3)
+        
+        # # Update order statuses
+        # filled_count, cancelled_count, pending_count = self._get_order_status_count()
+        # msg = f"Order status after cancellation: {filled_count} filled,"
+        # msg += f" {cancelled_count} cancelled, {pending_count} pending"
+        # logging.info(msg)
+
+    def close_all_positions(self):
+        """Close all open positions by issuing market sell orders."""
+        logging.info("Closing all open positions.")
+        
+        for position in self.positions:
+            if position.quantity > 0:
+                logging.info(f"Closing position for {position.ticker} with quantity {position.quantity}")
+                
+                contract = Contract()
+                contract.symbol = position.ticker
+                contract.secType = position.security
+                contract.exchange = self.config.exchange
+                contract.currency = position.currency
+                contract.lastTradeDateOrContractMonth = position.expiry
+                
+                # Place the order
+                order_id, _ = self.api.place_market_order(contract, "SELL", position.quantity)
+                order_details = self.api.get_open_order(order_id)
+                self.orders.append((order_details['order'], False))
 
             else:
-                raise TypeError("Unsupported order status. Please check.")
-
-
-    def enter_position(self, contract):
-        """Enter a new long position"""
-        order = TradingOrder(
-            order_type='MKT',
-            action='BUY',
-            quantity=self.config.number_of_contracts,
-            contract=contract,
-            order_id=None,
-            status=None,
-            timezone=self.config.timezone
-        )
-        self.api.place_trading_order(order)
-
-        if order.status != 'Filled':
-            logging.warning(f"Entry order status: {order.status}. Waiting 10s for fill...")
-            time.sleep(10)
-            self.api.update_order_status(order)
-
-        if order.status != 'Filled':
-            logging.warning(f"Order still not filled. Waiting 30 seconds...")
-            time.sleep(30)  
-            self.api.update_order_status(order)
-
-        self.orders.append(order)
-        self.db.add_order(order)
-
-        if order.status == 'Filled':
-            fill_price = self.api.get_order_status(order.order_id)['avg_fill_price']
-            logging.info(f"Entered long position: {self.config.number_of_contracts} contracts at {fill_price}")
-
-            position, stop_loss_order, take_profit_order = self._place_bracket_order(order)
-            self.db.add_position(position)
-            self.positions.append(position)
-
-            self.db.add_order(stop_loss_order)
-            self.db.add_order(take_profit_order)
-
-            self.orders.append(stop_loss_order)
-            self.orders.append(take_profit_order)
-
-    def _place_bracket_order(self, order):
-        """Place a bracket order"""
-        ibkr_position = self._get_position_from_order(order)
-        full_order_status = self.api.get_order_status(order.order_id)
-        fill_price = full_order_status['avg_fill_price']
-
-        stop_loss_order, take_profit_order = self._fill_bracket_order(order, fill_price)
-
-        position = Position(
-        ticker=order.ticker,
-        security=order.security,
-        currency=order.currency,
-        expiry=order.expiry,
-        contract_id=ibkr_position['contract']['conId'],
-        quantity=order.quantity,
-        avg_price=fill_price,
-        timezone=self.config.timezone,
-        stop_loss_price=stop_loss_order.aux_price,
-        take_profit_price=take_profit_order.aux_price
-        )
-        
-        return position, stop_loss_order, take_profit_order
-
-    def _fill_bracket_order(self, order, fill_price):
-        """Adds stop loss and take profit orders for a given order"""
-        # Calculate stop loss and take profit prices
-        order_id = order.order_id
-        contract = order.get_contract()
-
-        stop_price = fill_price - (self.config.stop_loss_ticks * self.config.mnq_tick_size)
-        profit_price = fill_price + (self.config.take_profit_ticks * self.config.mnq_tick_size)
-
-        stop_loss_order = TradingOrder(
-            order_type='STP',
-            action='SELL',
-            quantity=self.config.number_of_contracts,
-            contract=contract,
-            order_id=None,
-            status=None,
-            timezone=self.config.timezone,
-            parent_order_id=order_id,
-            aux_price=stop_price
-        )
-
-        take_profit_order = TradingOrder(
-            order_type='LMT',
-            action='SELL',
-            quantity=self.config.number_of_contracts,
-            contract=contract,
-            order_id=None,
-            status=None,
-            timezone=self.config.timezone,
-            parent_order_id=order_id,
-            aux_price=profit_price
-        )
-        
-        # Place stop loss and take profit orders
-        stop_order_id, stop_order_status = self.api.place_stop_loss_order(
-            stop_loss_order.get_contract(),
-            stop_loss_order.order_id, 
-            stop_loss_order.quantity, 
-            stop_price)
-        
-        profit_order_id, profit_order_status = self.api.place_profit_taker_order(
-            take_profit_order.get_contract(),
-            take_profit_order.order_id, 
-            take_profit_order.quantity, 
-            profit_price)
-
-        stop_loss_order.update_post_fill(order_id=stop_order_id, status=stop_order_status['status'])
-        take_profit_order.update_post_fill(order_id=profit_order_id, status=profit_order_status['status'])
-        
-        time.sleep(self.config.timeout)
-        logging.info(f"Stop loss order status: {stop_order_status}")
-        logging.info(f"Profit taker order status: {profit_order_status}")        
-        logging.info(f"Entered Stop loss: {stop_price}, Take profit: {profit_price}")
-
-        return stop_loss_order, take_profit_order
-
-    def _get_position_from_order(self, trading_order: TradingOrder):
-        """Find the position that corresponds to the passed order by matching contract attributes.
-        
-        Args:
-            trading_order (TradingOrder): The order to find a matching position for
-            
-        Returns:
-            dict: The matching position from the API, or None if no match is found
-            
-        Raises:
-            Exception: If no matching position is found
-        """
-        positions = self.api.get_positions()
-        
-        matching_positions = []
-        for position in positions:
-            pos_contract = position['contract']
-            
-            # Match all relevant contract attributes
-            if (pos_contract.symbol == trading_order.ticker and
-                pos_contract.secType == trading_order.security and
-                pos_contract.exchange == trading_order.exchange and
-                pos_contract.currency == trading_order.currency and
-                pos_contract.lastTradeDateOrContractMonth == trading_order.expiry):
+                msg = f"Unsupported position type: {position.ticker} with quantity {position.quantity}."
+                msg += " Cannot close."
+                logging.error(msg)
+                raise AttributeError(msg)
                 
-                matching_positions.append(position)
+        # # Wait a moment for orders to be processed
+        # time.sleep(1)
         
-        if len(matching_positions) > 1:
-            logging.warning(f"Found multiple matching positions for order {trading_order.order_id}")
-            return matching_positions[0]
+        # # Update positions
+        # self.update_positions()
         
-        else:
-            msg = f"No matching position found for order {trading_order.order_id}"
-            logging.error(msg)
-            raise Exception(msg)
+        # # Log final position status
+        # remaining_positions = sum(1 for position in self.positions if position.quantity > 0)
+        # logging.info(f"Remaining open positions after closing: {remaining_positions}")
+    
+    def _total_orders(self):
+        return sum(len(bracket_order) for bracket_order in self.orders)

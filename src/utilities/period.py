@@ -18,4 +18,4 @@ class Period:
         return tenor
 
     def __str__(self):
-        return str(self.units) + self.tenor
+        return str(self.units) + " " + self.tenor
