@@ -13,11 +13,12 @@ from src.api.api_utils import get_current_contract
 
 
 class PortfolioManager:
+    
     def __init__(self, config: Configuration, api: IBConnection):
         self.config = config
         self.api = api
 
-        # self.db = Database()
+        self.db = Database()
 
         self.positions: List[Position] = []
         self.orders: List[List[(Order, bool)]] = []       #list of bracket orders (list of 3 orders). bool is for whether an order has been resubmitted when cancelled
@@ -204,7 +205,11 @@ class PortfolioManager:
             # This means all orders were accepted by the API
             logging.info("All orders were accepted by the API.")
             self.orders.append(list(zip(bracket, [False] * len(bracket))))
-            # To do: add orders to db
+            self.db.add_order(bracket)
+
+            self.db.print_all_entries()
+
+            a = 5
 
         else:
             logging.error("Failed to place all orders.")
@@ -398,3 +403,8 @@ class PortfolioManager:
     
     def _total_orders(self):
         return sum(len(bracket_order) for bracket_order in self.orders)
+    
+    def clear_orders_and_positions(self):
+        """Clear all orders and positions."""
+        self.orders = []
+        self.positions = []

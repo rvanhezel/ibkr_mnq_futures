@@ -151,7 +151,7 @@ class IBConnection(EWrapper, EClient):
     #     self.current_contract = None
     #     return self.get_current_contract(ticker, exchange, ccy)
 
-    def get_historical_data(self, contract, duration='1 D', bar_size='1 min'):
+    def get_historical_data(self, contract, duration='1 D', bar_size='1 min', timezone='US/Eastern', RTH=False):
         """Get historical data for the current contract"""
         req_id = self.get_next_req_id()
         self.historical_data[req_id] = []
@@ -163,7 +163,7 @@ class IBConnection(EWrapper, EClient):
             duration,
             bar_size,
             "TRADES",  # Use actual trade prices
-            1,  # useRTH
+            False,  # useRTH
             1,  # formatDate
             False,  # keepUpToDate
             []  # chartOptions
@@ -187,6 +187,8 @@ class IBConnection(EWrapper, EClient):
                 'volume': [bar.volume for bar in new_bars]
             })
             new_bars_df.set_index('datetime', inplace=True)
+            new_bars_df.index = new_bars_df.index.tz_convert(timezone)
+
             self.historical_data[req_id] = new_bars_df
 
         return self.historical_data.pop(req_id, [])
@@ -589,3 +591,17 @@ class IBConnection(EWrapper, EClient):
         self.cancelOrder(order_id, OrderCancel())
   
 
+    def realtimeBar(self, reqId, time, open_, high, low, close, volume, wap, count):
+        # Convert Unix timestamp to pandas Timestamp
+        timestamp = pd.Timestamp.fromtimestamp(time)
+        print(
+            f"ReqId: {reqId}, "
+            f"Time: {timestamp}, "
+            f"Open: {open_}, "
+            f"High: {high}, "
+            f"Low: {low}, "
+            f"Close: {close}, "
+            f"Volume: {volume}, "
+            f"Wap: {wap}, "
+            f"Count: {count}"
+        )

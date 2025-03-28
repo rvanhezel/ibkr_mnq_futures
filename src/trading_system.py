@@ -88,6 +88,8 @@ class TradingSystem:
                 
             if not self.risk_manager.is_trading_hours():
                 logging.warning("Outside trading hours. Waiting...")
+                self.portfolio_manager.clear_orders_and_positions()
+                # set orders and positions to correct status in db
                 time.sleep(60)
                 continue
             
@@ -123,8 +125,8 @@ class TradingSystem:
                     current_time.year, 
                     current_time.month, 
                     current_time.day, 
-                    15, 
-                    59,           
+                    int(self.config.eod_exit_time[:2]),           
+                    int(self.config.eod_exit_time[2:]),           
                     tz=self.config.timezone)
             
             if current_time >= eod_cutoff:
@@ -146,7 +148,10 @@ class TradingSystem:
 
         # Get historical data
         contract = self.portfolio_manager.get_current_contract()
-        new_bars_df = self.api.get_historical_data(contract, str(self.config.horizon), str(self.config.bar_size))
+        new_bars_df = self.api.get_historical_data(contract, 
+                                                   str(self.config.horizon), 
+                                                   str(self.config.bar_size),
+                                                   self.config.timezone)
 
         if new_bars_df.empty:
             logging.warning("No historical data available")

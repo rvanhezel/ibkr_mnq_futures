@@ -2,6 +2,8 @@ import sqlite3
 import os
 import logging
 import pandas as pd
+from typing import Union
+from ibapi.order import Order
 
 
 class Database:
@@ -16,6 +18,8 @@ class Database:
 
     def _init_db(self):  
         """Initialize the database and create tables if they don't exist"""
+        logging.info("Initializing database")
+
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -23,17 +27,13 @@ class Database:
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS orders (
                         order_id INTEGER PRIMARY KEY,
-                        order_type TEXT NOT NULL,
                         action TEXT NOT NULL,
+                        order_type TEXT NOT NULL,
                         quantity INTEGER NOT NULL,
-                        ticker TEXT NOT NULL,
-                        security TEXT NOT NULL,
-                        exchange TEXT NOT NULL,
-                        currency TEXT NOT NULL,
-                        expiry TEXT NOT NULL,
-                        status TEXT NOT NULL,
-                        time_sent TIMESTAMP NOT NULL,
-                        time_filled TIMESTAMP
+                        aux_price REAL,
+                        lmt_price REAL,
+                        parent_id INTEGER,
+                        transmit BOOLEAN NOT NULL
                     )
                 ''')
                 # Create positions table
@@ -47,12 +47,7 @@ class Database:
                         quantity INTEGER NOT NULL,
                         avg_price REAL NOT NULL,
                         status TEXT NOT NULL,
-                        time_opened TIMESTAMP NOT NULL,
-                        time_closed TIMESTAMP,
-                        stop_loss_price REAL,
-                        take_profit_price REAL,
-                        market_value REAL,
-                        unrealized_pnl REAL
+                        time_opened TIMESTAMP NOT NULL
                     )
                 ''')
                 # Create trading_pause table
@@ -69,36 +64,41 @@ class Database:
             logging.error(f"Error initializing database: {str(e)}")
             raise
 
-    def add_order(self, order):
+    def add_order(self, order: Union[Order, list[Order]]):
         """Add a trading order to the database"""
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO orders (
-                        order_id, order_type, action, quantity, ticker, security,
-                        exchange, currency, expiry, status, time_sent, time_filled
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    order.order_id,
-                    order.order_type,
-                    order.action,
-                    order.quantity,
-                    order.ticker,
-                    order.security,
-                    order.exchange,
-                    order.currency,
-                    order.expiry,
-                    order.status,
-                    order.time_sent.isoformat(),
-                    order.time_filled.isoformat() if order.time_filled else None
-                ))
-                conn.commit()
-                logging.info(f"Added order {order.order_id} to database")
-                return True
-        except Exception as e:
-            logging.error(f"DB: Error adding order to database: {str(e)}")
-            return False
+        if not isinstance(order, list):
+            order = [order]
+
+        success = True
+        for cur_order in order:
+            logging.debug(f"Adding order to database: {cur_order}")
+
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        INSERT INTO orders (
+                            order_id, action, order_type, quantity, aux_price,
+                            lmt_price, parent_id, transmit
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        cur_order.orderId,
+                        cur_order.action,
+                        cur_order.orderType,
+                        cur_order.totalQuantity,
+                        cur_order.auxPrice,
+                        cur_order.lmtPrice,
+                        cur_order.parentId,
+                        cur_order.transmit
+                    ))
+                    conn.commit()
+                    logging.info(f"Added order {cur_order.orderId} to database")
+                    
+            except Exception as e:
+                logging.error(f"DB: Error adding order to database: {str(e)}")
+                success = False
+
+        return success
 
     def get_order(self, order_id: int):
         """Get an order from the database by ID"""
@@ -110,35 +110,18 @@ class Database:
                 if row:
                     return {
                         'order_id': row[0],
-                        'order_type': row[1],
-                        'action': row[2],
+                        'action': row[1],
+                        'order_type': row[2],
                         'quantity': row[3],
-                        'ticker': row[4],
-                        'security': row[5],
-                        'exchange': row[6],
-                        'currency': row[7],
-                        'expiry': row[8],
-                        'status': row[9],
-                        'time_sent': pd.Timestamp(row[10]),
-                        'time_filled': pd.Timestamp(row[11]) if row[11] else None
+                        'aux_price': row[4],
+                        'lmt_price': row[5],
+                        'parent_id': row[6],
+                        'transmit': row[7]
                     }
                 return None
         except Exception as e:
             logging.error(f"DB: Error getting order from database: {str(e)}")
             return None
-
-    def remove_order(self, order_id: int):
-        """Remove an order from the database"""
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('DELETE FROM orders WHERE order_id = ?', (order_id,))
-                conn.commit()
-                logging.info(f"DB: Removed order {order_id}")
-                return True
-        except Exception as e:
-            logging.error(f"DB: Error removing order from database: {str(e)}")
-            return False
 
     def add_position(self, position):
         """Add a position to the database"""
@@ -147,10 +130,9 @@ class Database:
                 cursor = conn.cursor()
                 cursor.execute('''
                     INSERT INTO positions (
-                        contract_id, ticker, security, currency, expiry, quantity,
-                        avg_price, status, time_opened, time_closed,
-                        stop_loss_price, take_profit_price, market_value, unrealized_pnl
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        contract_id, ticker, security, currency, expiry,
+                        quantity, avg_price, status, time_opened
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     position.contract_id,
                     position.ticker,
@@ -160,12 +142,7 @@ class Database:
                     position.quantity,
                     position.avg_price,
                     position.status,
-                    position.time_opened.isoformat(),
-                    position.time_closed.isoformat() if position.time_closed else None,
-                    position.stop_loss_price,
-                    position.take_profit_price,
-                    position.market_value,
-                    position.unrealized_pnl
+                    position.time_opened.isoformat()
                 ))
                 conn.commit()
                 logging.info(f"Added position {position.contract_id} to database")
@@ -191,30 +168,12 @@ class Database:
                         'quantity': row[5],
                         'avg_price': row[6],
                         'status': row[7],
-                        'time_opened': pd.Timestamp(row[8]),
-                        'time_closed': pd.Timestamp(row[9]) if row[9] else None,
-                        'stop_loss_price': row[10],
-                        'take_profit_price': row[11],
-                        'market_value': row[12],
-                        'unrealized_pnl': row[13]
+                        'time_opened': pd.Timestamp(row[8])
                     }
                 return None
         except Exception as e:
             logging.error(f"DB: Error getting position from database: {str(e)}")
             return None
-
-    def remove_position(self, contract_id: int):
-        """Remove a position from the database"""
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('DELETE FROM positions WHERE contract_id = ?', (contract_id,))
-                conn.commit()
-                logging.info(f"DB: Removed position {contract_id}")
-                return True
-        except Exception as e:
-            logging.error(f"DB: Error removing position from database: {str(e)}")
-            return False
 
     def add_trading_pause(self, start_time: pd.Timestamp, end_time: pd.Timestamp):
         """Add a trading pause period to the database"""
@@ -253,22 +212,6 @@ class Database:
             logging.error(f"DB: Error getting trading pause from database: {str(e)}")
             return None
 
-    def remove_trading_pause(self, start_time: pd.Timestamp):
-        """Remove a trading pause from the database by start time"""
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    DELETE FROM trading_pause 
-                    WHERE start_time = ?
-                ''', (start_time.isoformat(),))
-                conn.commit()
-                logging.info(f"DB: Removed trading pause starting at {start_time}")
-                return True
-        except Exception as e:
-            logging.error(f"DB: Error removing trading pause from database: {str(e)}")
-            return False
-
     def update_order(self, order):
         """Update an existing order in the database"""
         try:
@@ -276,30 +219,22 @@ class Database:
                 cursor = conn.cursor()
                 cursor.execute('''
                     UPDATE orders SET
-                        order_type = ?,
                         action = ?,
+                        order_type = ?,
                         quantity = ?,
-                        ticker = ?,
-                        security = ?,
-                        exchange = ?,
-                        currency = ?,
-                        expiry = ?,
-                        status = ?,
-                        time_sent = ?,
-                        time_filled = ?
+                        aux_price = ?,
+                        lmt_price = ?,
+                        parent_id = ?,
+                        transmit = ?
                     WHERE order_id = ?
                 ''', (
-                    order.order_type,
                     order.action,
+                    order.order_type,
                     order.quantity,
-                    order.ticker,
-                    order.security,
-                    order.exchange,
-                    order.currency,
-                    order.expiry,
-                    order.status,
-                    order.time_sent.isoformat(),
-                    order.time_filled.isoformat() if order.time_filled else None,
+                    order.aux_price,
+                    order.lmt_price,
+                    order.parent_id,
+                    order.transmit,
                     order.order_id
                 ))
                 conn.commit()
@@ -323,12 +258,7 @@ class Database:
                         quantity = ?,
                         avg_price = ?,
                         status = ?,
-                        time_opened = ?,
-                        time_closed = ?,
-                        stop_loss_price = ?,
-                        take_profit_price = ?,
-                        market_value = ?,
-                        unrealized_pnl = ?
+                        time_opened = ?
                     WHERE contract_id = ?
                 ''', (
                     position.ticker,
@@ -339,11 +269,6 @@ class Database:
                     position.avg_price,
                     position.status,
                     position.time_opened.isoformat(),
-                    position.time_closed.isoformat() if position.time_closed else None,
-                    position.stop_loss_price,
-                    position.take_profit_price,
-                    position.market_value,
-                    position.unrealized_pnl,
                     position.contract_id
                 ))
                 conn.commit()
@@ -351,5 +276,70 @@ class Database:
                 return True
         except Exception as e:
             logging.error(f"DB: Error updating position in database: {str(e)}")
+            return False
+
+    def print_all_entries(self):
+        """Print all entries from all tables in a readable format"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Print Orders
+                print("\n=== ORDERS ===")
+                cursor.execute("PRAGMA table_info(orders)")
+                order_columns = [col[1] for col in cursor.fetchall()]
+                cursor.execute('SELECT * FROM orders')
+                orders = cursor.fetchall()
+                if orders:
+                    # Create header with column names
+                    header = " | ".join(f"{col:<8}" for col in order_columns)
+                    print(header)
+                    print("-" * len(header))
+                    # Print data rows
+                    for order in orders:
+                        row = " | ".join(f"{str(val):<8}" for val in order)
+                        print(row)
+                else:
+                    print("No orders found")
+
+                # Print Positions
+                print("\n=== POSITIONS ===")
+                cursor.execute("PRAGMA table_info(positions)")
+                position_columns = [col[1] for col in cursor.fetchall()]
+                cursor.execute('SELECT * FROM positions')
+                positions = cursor.fetchall()
+                if positions:
+                    # Create header with column names
+                    header = " | ".join(f"{col:<10}" for col in position_columns)
+                    print(header)
+                    print("-" * len(header))
+                    # Print data rows
+                    for pos in positions:
+                        row = " | ".join(f"{str(val):<10}" for val in pos)
+                        print(row)
+                else:
+                    print("No positions found")
+
+                # Print Trading Pauses
+                print("\n=== TRADING PAUSES ===")
+                cursor.execute("PRAGMA table_info(trading_pause)")
+                pause_columns = [col[1] for col in cursor.fetchall()]
+                cursor.execute('SELECT * FROM trading_pause')
+                pauses = cursor.fetchall()
+                if pauses:
+                    # Create header with column names
+                    header = " | ".join(f"{col:<15}" for col in pause_columns)
+                    print(header)
+                    print("-" * len(header))
+                    # Print data rows
+                    for pause in pauses:
+                        row = " | ".join(f"{str(val):<15}" for val in pause)
+                        print(row)
+                else:
+                    print("No trading pauses found")
+
+                return True
+        except Exception as e:
+            logging.error(f"DB: Error printing database entries: {str(e)}")
             return False
         

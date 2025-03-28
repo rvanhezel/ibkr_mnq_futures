@@ -26,6 +26,7 @@ class Configuration:
         self.currency = self.config.get('Trading', 'currency')
         self.trading_start_time = self.config.get('Trading', 'trading_start_time')
         self.trading_end_time = self.config.get('Trading', 'trading_end_time')
+        self.eod_exit_time = self.config.get('Trading', 'eod_exit_time')
         self.timezone = self.config.get('Trading', 'timezone')
         self.roll_contract_days_before = self.config.getint('Trading', 'roll_contract_days_before')
         self.resubmit_cancelled_order = self.config.getboolean('Trading', 'resubmit_cancelled_order')

@@ -56,7 +56,8 @@ class RiskManager:
         if self.trading_start < self.trading_end:
             return self.trading_start <= current_time < self.trading_end
         else:
-            return not self.trading_end <= current_time < self.trading_start
+            # return not self.trading_end <= current_time < self.trading_start
+            return current_time < self.trading_start or current_time > self.trading_end
             
     def is_trading_day(self):
         """Check if today is a trading day (Sunday through Friday)"""

@@ -1,0 +1,124 @@
+28/03/2025 17:56:46.767 - INFO - Logger initialized
+28/03/2025 17:56:46.817 - INFO - Using existing database at trading.db
+28/03/2025 17:56:46.822 - INFO - Configuration saved to C:\Users\raoul\Documents\UpworkProjects\ibkr_mnq_futures\output\config\config_28032025_175646.cfg
+28/03/2025 17:56:46.822 - INFO - Starting trading system...
+28/03/2025 17:56:46.823 - INFO - Paper trading mode enabled
+28/03/2025 17:56:46.840 - INFO - (2104) Market data farm connection is OK:usfarm.nj 
+28/03/2025 17:56:46.840 - INFO - (2104) Market data farm connection is OK:usfuture 
+28/03/2025 17:56:46.840 - INFO - (2104) Market data farm connection is OK:cashfarm 
+28/03/2025 17:56:46.842 - INFO - (2104) Market data farm connection is OK:usfarm 
+28/03/2025 17:56:46.842 - INFO - (2106) HMDS data farm connection is OK:euhmds 
+28/03/2025 17:56:46.843 - INFO - (2106) HMDS data farm connection is OK:fundfarm 
+28/03/2025 17:56:46.843 - INFO - (2106) HMDS data farm connection is OK:ushmds 
+28/03/2025 17:56:46.844 - INFO - (2158) Sec-def data farm connection is OK:secdefil 
+28/03/2025 17:56:46.934 - INFO - Successfully connected to Interactive Brokers
+28/03/2025 17:56:46.935 - INFO - Starting trading loop
+28/03/2025 17:56:46.936 - INFO - PortfolioManager: Updating positions from orders.
+28/03/2025 17:56:46.937 - DEBUG - PortfolioManager: There are 0 orders
+28/03/2025 17:56:46.938 - INFO - PortfolioManager: Finished updating positions from orders. Currently 0 position(s).
+28/03/2025 17:56:46.938 - DEBUG - Checking for cancelled market orders.
+28/03/2025 17:56:46.939 - DEBUG - No cancelled orders found.
+28/03/2025 17:56:46.939 - DEBUG - Checking PnL for trading pause.
+28/03/2025 17:56:46.940 - DEBUG - PnL: 0
+28/03/2025 17:56:46.941 - DEBUG - Checking for trading opportunities.
+28/03/2025 17:56:47.900 - INFO - Market data:                                open      high       low     close volume
+datetime                                                                
+2025-03-28 11:47:00-05:00  19513.00  19517.25  19509.50  19513.00   1819
+2025-03-28 11:48:00-05:00  19513.00  19527.50  19510.50  19518.25   2689
+2025-03-28 11:49:00-05:00  19518.25  19520.25  19510.50  19515.50   1701
+2025-03-28 11:50:00-05:00  19515.25  19526.25  19513.75  19519.50   2235
+2025-03-28 11:51:00-05:00  19519.25  19531.00  19516.75  19525.75   2113
+2025-03-28 11:52:00-05:00  19525.75  19533.00  19525.00  19528.50   1928
+2025-03-28 11:53:00-05:00  19528.25  19530.50  19511.75  19512.00   2651
+2025-03-28 11:54:00-05:00  19512.25  19527.75  19511.75  19525.25   2018
+2025-03-28 11:55:00-05:00  19525.25  19525.50  19515.25  19516.25   1361
+2025-03-28 11:56:00-05:00  19516.00  19517.75  19502.75  19504.00   2569
+28/03/2025 17:56:47.900 - INFO - Signal generated: BUY
+28/03/2025 17:56:47.901 - DEBUG - Placing bracket order.
+28/03/2025 17:56:48.103 - DEBUG - STP price: 19471.25, LMT price: 19576.25
+28/03/2025 17:56:54.501 - ERROR - Error 399: Order Message: BUY 2 MNQ JUN'25 Warning: Your order was repriced so as not to cross a related resting order. 
+28/03/2025 17:56:54.508 - INFO - All orders were accepted by the API.
+28/03/2025 17:57:03.644 - DEBUG - Adding order to database: [1267176593424: 192,0,0: MKT BUY 2.000000@ , 1267176599504: 193,0,0: LMT SELL 2.000000@19576.25 , 1267176599824: 194,0,0: STP SELL 2.000000@ ]
+28/03/2025 17:57:03.646 - ERROR - DB: Error adding order to database: no such table: orders
+28/03/2025 17:57:03.649 - ERROR - DB: Error printing database entries: no such table: orders
+28/03/2025 17:57:03.649 - ERROR - Error in trading loop: 'str' object cannot be interpreted as an integer
+28/03/2025 17:57:13.161 - ERROR - Error 202: Order Canceled - reason: 
+28/03/2025 17:57:13.650 - INFO - Starting trading loop
+28/03/2025 17:57:13.652 - INFO - PortfolioManager: Updating positions from orders.
+28/03/2025 17:57:13.653 - DEBUG - PortfolioManager: There are 3 orders
+28/03/2025 17:57:13.654 - INFO - Order: 192,0,0: MKT BUY 2.000000@ 
+28/03/2025 17:57:13.654 - INFO - Order: 193,0,0: LMT SELL 2.000000@19576.25 
+28/03/2025 17:57:13.655 - INFO - Order: 194,0,0: STP SELL 2.000000@ 
+28/03/2025 17:57:13.656 - DEBUG - Order statuses: 1 filled, 0 cancelled, 2 pending
+28/03/2025 17:57:13.657 - INFO - Buy order filled, creating new position.
+28/03/2025 17:57:13.663 - INFO - PortfolioManager: Finished updating positions from orders. Currently 1 position(s).
+28/03/2025 17:57:13.665 - INFO - Position(
+  Ticker: MNQ
+  Security: FUT
+  Currency: USD
+  Expiry: 20250620
+  Contract ID: 691171685
+  Quantity: 2
+  Avg Price: 19500.75 USD
+  Stop Loss: None
+  Take Profit: None
+  Status: OPEN
+  Time Opened: 2025-03-28 11:57:13 CDT
+28/03/2025 17:57:13.666 - DEBUG - Checking for cancelled market orders.
+28/03/2025 17:57:13.667 - DEBUG - No cancelled orders found.
+28/03/2025 17:57:13.670 - DEBUG - Checking PnL for trading pause.
+28/03/2025 17:57:13.674 - DEBUG - PnL: 0
+28/03/2025 17:57:13.675 - DEBUG - Checking for trading opportunities.
+28/03/2025 17:57:14.347 - INFO - Market data:                                open      high       low     close volume
+datetime                                                                
+2025-03-28 11:48:00-05:00  19513.00  19527.50  19510.50  19518.25   2689
+2025-03-28 11:49:00-05:00  19518.25  19520.25  19510.50  19515.50   1701
+2025-03-28 11:50:00-05:00  19515.25  19526.25  19513.75  19519.50   2235
+2025-03-28 11:51:00-05:00  19519.25  19531.00  19516.75  19525.75   2113
+2025-03-28 11:52:00-05:00  19525.75  19533.00  19525.00  19528.50   1928
+2025-03-28 11:53:00-05:00  19528.25  19530.50  19511.75  19512.00   2651
+2025-03-28 11:54:00-05:00  19512.25  19527.75  19511.75  19525.25   2018
+2025-03-28 11:55:00-05:00  19525.25  19525.50  19515.25  19516.25   1361
+2025-03-28 11:56:00-05:00  19516.00  19517.75  19498.50  19501.00   3893
+2025-03-28 11:57:00-05:00  19501.00  19502.75  19496.00  19496.25   1071
+28/03/2025 17:57:14.348 - INFO - Signal generated: BUY
+28/03/2025 17:57:14.348 - ERROR - Error in trading loop: 'str' object cannot be interpreted as an integer
+28/03/2025 17:57:24.348 - INFO - Starting trading loop
+28/03/2025 17:57:24.349 - INFO - PortfolioManager: Updating positions from orders.
+28/03/2025 17:57:24.350 - DEBUG - PortfolioManager: There are 3 orders
+28/03/2025 17:57:24.350 - INFO - Order: 192,0,0: MKT BUY 2.000000@ 
+28/03/2025 17:57:24.350 - INFO - Order: 193,0,0: LMT SELL 2.000000@19576.25 
+28/03/2025 17:57:24.356 - INFO - Order: 194,0,0: STP SELL 2.000000@ 
+28/03/2025 17:57:24.387 - DEBUG - Order statuses: 1 filled, 0 cancelled, 2 pending
+28/03/2025 17:57:24.389 - INFO - PortfolioManager: Finished updating positions from orders. Currently 1 position(s).
+28/03/2025 17:57:24.391 - INFO - Position(
+  Ticker: MNQ
+  Security: FUT
+  Currency: USD
+  Expiry: 20250620
+  Contract ID: 691171685
+  Quantity: 2
+  Avg Price: 19500.75 USD
+  Stop Loss: None
+  Take Profit: None
+  Status: OPEN
+  Time Opened: 2025-03-28 11:57:13 CDT
+28/03/2025 17:57:24.391 - DEBUG - Checking for cancelled market orders.
+28/03/2025 17:57:24.391 - DEBUG - No cancelled orders found.
+28/03/2025 17:57:24.392 - DEBUG - Checking PnL for trading pause.
+28/03/2025 17:57:24.392 - DEBUG - PnL: 0
+28/03/2025 17:57:24.396 - DEBUG - Checking for trading opportunities.
+28/03/2025 17:57:25.140 - INFO - Market data:                                open      high       low     close volume
+datetime                                                                
+2025-03-28 11:48:00-05:00  19513.00  19527.50  19510.50  19518.25   2689
+2025-03-28 11:49:00-05:00  19518.25  19520.25  19510.50  19515.50   1701
+2025-03-28 11:50:00-05:00  19515.25  19526.25  19513.75  19519.50   2235
+2025-03-28 11:51:00-05:00  19519.25  19531.00  19516.75  19525.75   2113
+2025-03-28 11:52:00-05:00  19525.75  19533.00  19525.00  19528.50   1928
+2025-03-28 11:53:00-05:00  19528.25  19530.50  19511.75  19512.00   2651
+2025-03-28 11:54:00-05:00  19512.25  19527.75  19511.75  19525.25   2018
+2025-03-28 11:55:00-05:00  19525.25  19525.50  19515.25  19516.25   1361
+2025-03-28 11:56:00-05:00  19516.00  19517.75  19498.50  19501.00   3893
+2025-03-28 11:57:00-05:00  19501.00  19502.75  19495.50  19498.50   1612
+28/03/2025 17:57:25.141 - INFO - Signal generated: BUY
+28/03/2025 17:57:25.141 - ERROR - Error in trading loop: 'str' object cannot be interpreted as an integer
