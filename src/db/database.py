@@ -8,7 +8,8 @@ from ibapi.order import Order
 
 class Database:
 
-    def __init__(self, db_path="trading.db"):
+    def __init__(self, timezone, db_path="trading.db"):
+        self.timezone = timezone
         self.db_path = db_path
 
         if not os.path.exists(self.db_path):
@@ -33,7 +34,8 @@ class Database:
                         aux_price REAL,
                         lmt_price REAL,
                         parent_id INTEGER,
-                        transmit BOOLEAN NOT NULL
+                        transmit BOOLEAN NOT NULL,
+                        created_timestamp TIMESTAMP NOT NULL
                     )
                 ''')
                 # Create positions table
@@ -47,7 +49,8 @@ class Database:
                         quantity INTEGER NOT NULL,
                         avg_price REAL NOT NULL,
                         status TEXT NOT NULL,
-                        time_opened TIMESTAMP NOT NULL
+                        time_opened TIMESTAMP NOT NULL,
+                        created_timestamp TIMESTAMP NOT NULL
                     )
                 ''')
                 # Create trading_pause table
@@ -55,7 +58,8 @@ class Database:
                     CREATE TABLE IF NOT EXISTS trading_pause (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         start_time TIMESTAMP NOT NULL,
-                        end_time TIMESTAMP NOT NULL
+                        end_time TIMESTAMP NOT NULL,
+                        created_timestamp TIMESTAMP NOT NULL
                     )
                 ''')
                 conn.commit()
@@ -70,6 +74,8 @@ class Database:
             order = [order]
 
         success = True
+        current_time = pd.Timestamp.now(tz=self.timezone)
+        
         for cur_order in order:
             logging.debug(f"Adding order to database: {cur_order}")
 
@@ -79,8 +85,8 @@ class Database:
                     cursor.execute('''
                         INSERT INTO orders (
                             order_id, action, order_type, quantity, aux_price,
-                            lmt_price, parent_id, transmit
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            lmt_price, parent_id, transmit, created_timestamp
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         cur_order.orderId,
                         cur_order.action,
@@ -89,11 +95,12 @@ class Database:
                         cur_order.auxPrice,
                         cur_order.lmtPrice,
                         cur_order.parentId,
-                        cur_order.transmit
+                        cur_order.transmit,
+                        current_time.isoformat()
                     ))
                     conn.commit()
                     logging.info(f"Added order {cur_order.orderId} to database")
-                    
+
             except Exception as e:
                 logging.error(f"DB: Error adding order to database: {str(e)}")
                 success = False
@@ -116,7 +123,8 @@ class Database:
                         'aux_price': row[4],
                         'lmt_price': row[5],
                         'parent_id': row[6],
-                        'transmit': row[7]
+                        'transmit': row[7],
+                        'created_timestamp': row[8]
                     }
                 return None
         except Exception as e:
@@ -128,11 +136,12 @@ class Database:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
+                current_time = pd.Timestamp.now(tz=self.timezone)
                 cursor.execute('''
                     INSERT INTO positions (
                         contract_id, ticker, security, currency, expiry,
-                        quantity, avg_price, status, time_opened
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        quantity, avg_price, status, time_opened, created_timestamp
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     position.contract_id,
                     position.ticker,
@@ -142,7 +151,8 @@ class Database:
                     position.quantity,
                     position.avg_price,
                     position.status,
-                    position.time_opened.isoformat()
+                    position.time_opened.isoformat(),
+                    current_time.isoformat()
                 ))
                 conn.commit()
                 logging.info(f"Added position {position.contract_id} to database")
@@ -168,7 +178,8 @@ class Database:
                         'quantity': row[5],
                         'avg_price': row[6],
                         'status': row[7],
-                        'time_opened': pd.Timestamp(row[8])
+                        'time_opened': pd.Timestamp(row[8]),
+                        'created_timestamp': pd.Timestamp(row[9])
                     }
                 return None
         except Exception as e:
@@ -180,10 +191,11 @@ class Database:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
+                current_time = pd.Timestamp.now(tz=self.timezone)
                 cursor.execute('''
-                    INSERT INTO trading_pause (start_time, end_time)
-                    VALUES (?, ?)
-                ''', (start_time.isoformat(), end_time.isoformat()))
+                    INSERT INTO trading_pause (start_time, end_time, created_timestamp)
+                    VALUES (?, ?, ?)
+                ''', (start_time.isoformat(), end_time.isoformat(), current_time.isoformat()))
                 conn.commit()
                 logging.info(f"Added trading pause to DB from {start_time} to {end_time}")
                 return True
@@ -196,7 +208,7 @@ class Database:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    SELECT start_time, end_time 
+                    SELECT start_time, end_time, created_timestamp
                     FROM trading_pause 
                     ORDER BY start_time DESC 
                     LIMIT 1
@@ -205,7 +217,8 @@ class Database:
                 if row:
                     return {
                         'start_time': pd.Timestamp(row[0]).tz_localize(timezone),
-                        'end_time': pd.Timestamp(row[1]).tz_localize(timezone)
+                        'end_time': pd.Timestamp(row[1]).tz_localize(timezone),
+                        'created_timestamp': pd.Timestamp(row[2]).tz_localize(timezone)
                     }
                 return None
         except Exception as e:
@@ -342,4 +355,55 @@ class Database:
         except Exception as e:
             logging.error(f"DB: Error printing database entries: {str(e)}")
             return False
+
+    def get_all_orders_and_positions(self):
+        """Get all orders and positions from the database"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Get all order IDs
+                cursor.execute('SELECT order_id FROM orders ORDER BY created_timestamp DESC')
+                order_ids = [row[0] for row in cursor.fetchall()]
+                
+                # Get all position contract IDs
+                cursor.execute('SELECT contract_id FROM positions ORDER BY created_timestamp DESC')
+                position_ids = [row[0] for row in cursor.fetchall()]
+                
+                # Get orders and positions using existing methods
+                orders = [self.get_order(order_id) for order_id in order_ids]
+                positions = [self.get_position(contract_id) for contract_id in position_ids]
+                
+                return {
+                    'orders': orders,
+                    'positions': positions
+                }
+        except Exception as e:
+            logging.error(f"DB: Error getting all orders and positions: {str(e)}")
+            return {
+                'orders': [],
+                'positions': []
+            }
+
+    def get_trading_pauses(self):
+        """Get all trading pauses from the database"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT start_time, end_time, created_timestamp
+                    FROM trading_pause 
+                    ORDER BY start_time DESC
+                ''')
+                rows = cursor.fetchall()
+                if rows:
+                    return [{
+                        'start_time': pd.Timestamp(row[0]).tz_localize(self.timezone),
+                        'end_time': pd.Timestamp(row[1]).tz_localize(self.timezone),
+                        'created_timestamp': pd.Timestamp(row[2]).tz_localize(self.timezone)
+                    } for row in rows]
+                return []
+        except Exception as e:
+            logging.error(f"DB: Error getting trading pauses from database: {str(e)}")
+            return []
         

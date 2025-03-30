@@ -2,6 +2,9 @@ import datetime
 import pytz
 import pandas as pd
 import os
+from src.db.database import Database
+import logging
+from src.utilities.utils import trading_day_start_time
 
 
 class RiskManager:
@@ -32,10 +35,13 @@ class RiskManager:
             return True
         return False
     
-    def set_trading_pause_time(self):
+    def set_trading_pause_time(self, db: Database = None):
         """Set the start time for trading pause"""
         self.pause_start_time = pd.Timestamp.now(tz=self.timezone)
         self.pause_end_time = self.pause_start_time + pd.Timedelta(hours=self.trading_pause_hours)
+
+        if db is not None:
+            db.add_trading_pause(self.pause_start_time, self.pause_end_time)
 
     def can_resume_trading_after_pause(self):
         """Check if trading can resume after pause"""
@@ -43,13 +49,19 @@ class RiskManager:
             return True
         
         if pd.Timestamp.now(tz=self.timezone) >= self.pause_end_time:
-            self.pause_start = None
+            msg = f"RiskManager: Trading pause from {self.pause_start_time}" 
+            msg += f" to {self.pause_end_time} has ended. Resetting pause times."
+            logging.info(msg)
+            self.pause_start_time = None
+            self.pause_end_time = None
             return True
         return False
     
     def is_trading_hours(self):
         """Check if current time is within trading hours"""
         now = pd.Timestamp.now(tz=self.timezone)
+        logging.debug(f"RiskManager: Checking trading time. Current timestamp: {now}")
+
         current_time = now.time()
         
         # Trading hours are generally from 9 PM to 4 PM EST next day
@@ -62,6 +74,8 @@ class RiskManager:
     def is_trading_day(self):
         """Check if today is a trading day (Sunday through Friday)"""
         now = pd.Timestamp.now(tz=self.timezone)
+        logging.debug(f"RiskManager: Checking trading day status. Current timestamp: {now}")
+
         weekday = now.weekday()
         
         # Sunday through Friday (6-4)
@@ -76,4 +90,21 @@ class RiskManager:
 
     def calculate_take_profit_price(self, entry_price):
         """Calculate take profit price based on ticks"""
-        return entry_price + (self.take_profit_ticks * self.mnq_tick_size) 
+        return entry_price + (self.take_profit_ticks * self.mnq_tick_size)
+
+    def populate_from_db(self, db: Database):
+        """Load trading pauses from database and simply set the pause times
+        based of the latest entry in the db"""
+        logging.info(f"RiskManager: Populating trading pause times from DB")
+
+        trading_pauses = db.get_trading_pauses()
+
+        if len(trading_pauses) == 0:
+            logging.info("No trading pauses found in database")
+            return
+        
+        latest_pause = trading_pauses[-1]
+        self.pause_start_time = latest_pause['start_time']
+        self.pause_end_time = latest_pause['end_time']
+        logging.debug(f"Loaded trading pause: {latest_pause['start_time']} to {latest_pause['end_time']}")
+        return

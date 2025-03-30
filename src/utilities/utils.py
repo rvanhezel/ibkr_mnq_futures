@@ -96,3 +96,22 @@ def shift_date_by_period(period: Period, input_date: pd.Timestamp, direction: st
         raise ValueError("Period tenor not recognized")
 
     return input_date
+
+def trading_day_start_time(start_time: str, timezone: str) -> pd.Timestamp:
+    hours = int(start_time[:2])
+    minutes = int(start_time[2:])
+    
+    now = pd.Timestamp.now(tz=timezone)
+    today_start = pd.Timestamp(
+        year=now.year,
+        month=now.month,
+        day=now.day,
+        hour=hours,
+        minute=minutes,
+        tz=timezone
+    )
+    
+    if today_start < now:
+        return today_start
+    else:
+        return today_start - pd.Timedelta(days=1)

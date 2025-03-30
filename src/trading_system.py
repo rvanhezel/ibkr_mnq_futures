@@ -30,7 +30,8 @@ class TradingSystem:
             cfg.take_profit_ticks)
         self.strategy = BollingerBandRSIStrategy()
         self.config = cfg
-        self.portfolio_manager = PortfolioManager(cfg, self.api)
+        self.db = Database(self.config.timezone)
+        self.portfolio_manager = PortfolioManager(cfg, self.api, self.db)
 
         self.market_data = pd.DataFrame()
         
@@ -47,7 +48,8 @@ class TradingSystem:
                 logging.info("Live trading mode enabled")
 
             self.api.connect()
-            # self.portfolio_manager.populate_from_db()
+            self.portfolio_manager.populate_from_db()
+            self.risk_manager.populate_from_db(self.db)
 
             while True:
 
@@ -89,7 +91,6 @@ class TradingSystem:
             if not self.risk_manager.is_trading_hours():
                 logging.warning("Outside trading hours. Waiting...")
                 self.portfolio_manager.clear_orders_and_positions()
-                # set orders and positions to correct status in db
                 time.sleep(60)
                 continue
             
@@ -111,7 +112,7 @@ class TradingSystem:
 
             if self.risk_manager.should_pause_trading(pnl):
                 logging.warning(f"PnL: {pnl} is below max 24h loss. Pausing trading.")
-                self.risk_manager.set_trading_pause_time()
+                self.risk_manager.set_trading_pause_time(self.db)
 
                 logging.warning(f"Trading paused until {self.risk_manager.pause_end_time}")
                 time.sleep(60)

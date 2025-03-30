@@ -1,7 +1,41 @@
 from ibapi.contract import Contract
+from ibapi.order import Order
 import pandas as pd
 from src.utilities.utils import get_third_friday
 
+
+def order_from_dict(order_dict: dict) -> Order:
+    """Convert an order dictionary (from database) into an IBKR Order object
+    
+    Args:
+        order_dict (dict): Dictionary containing order details from database
+            Expected keys:
+            - order_id: int
+            - action: str
+            - order_type: str
+            - quantity: int
+            - aux_price: float
+            - lmt_price: float
+            - parent_id: int
+            - transmit: bool
+            - created_timestamp: str
+            
+    Returns:
+        Order: IBKR Order object with the specified parameters
+    """
+    order = Order()
+    
+    # Set all order attributes from the dictionary
+    order.orderId = order_dict['order_id']
+    order.action = order_dict['action']
+    order.orderType = order_dict['order_type']
+    order.totalQuantity = order_dict['quantity']
+    order.auxPrice = order_dict['aux_price']
+    order.lmtPrice = order_dict['lmt_price']
+    order.parentId = order_dict['parent_id']
+    order.transmit = order_dict['transmit']
+    
+    return order
 
 
 def get_current_contract(ticker, exchange, ccy, roll_contract_days_before, timezone):

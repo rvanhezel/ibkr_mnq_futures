@@ -9,16 +9,16 @@ from src.configuration import Configuration
 import logging
 import time
 from src.db.database import Database
-from src.api.api_utils import get_current_contract
+from src.api.api_utils import get_current_contract, order_from_dict
+from src.utilities.utils import trading_day_start_time
 
 
 class PortfolioManager:
-    
-    def __init__(self, config: Configuration, api: IBConnection):
+
+    def __init__(self, config: Configuration, api: IBConnection, db: Database):
         self.config = config
         self.api = api
-
-        self.db = Database()
+        self.db = db
 
         self.positions: List[Position] = []
         self.orders: List[List[(Order, bool)]] = []       #list of bracket orders (list of 3 orders). bool is for whether an order has been resubmitted when cancelled
@@ -68,7 +68,7 @@ class PortfolioManager:
                             )
 
                             self.positions.append(position)
-                            # # self.db.add_position(position)
+                            self.db.add_position(position)
 
                             self.orders[bracket_idx][order_idx] = (order, True)
 
@@ -87,7 +87,7 @@ class PortfolioManager:
 
                             self.orders[bracket_idx][order_idx] = (order, True)
                             
-                            # update position in db
+                            self.db.add_position(position) #create a new entry in the db as opposed to updating the existing one
 
                     elif order.orderType == 'MKT' and order.action == 'SELL':
 
@@ -105,7 +105,7 @@ class PortfolioManager:
                         
                         self.orders[bracket_idx][order_idx] = (order, True)
 
-                        # update position in db
+                        self.db.add_position(position) 
 
                     elif order.orderType == 'STP' or order.orderType == 'LMT' and order.action == 'SELL':
 
@@ -123,7 +123,7 @@ class PortfolioManager:
 
                         self.orders[bracket_idx][order_idx] = (order, True)
 
-                        # update position in db
+                        self.db.add_position(position)
 
                     else:
 
@@ -405,6 +405,29 @@ class PortfolioManager:
         return sum(len(bracket_order) for bracket_order in self.orders)
     
     def clear_orders_and_positions(self):
-        """Clear all orders and positions."""
+        """Clear all orders and positions. This is called when the trading day
+        has ended and we need to clear the orders and positions for the next day.
+        """
         self.orders = []
         self.positions = []
+
+    def populate_from_db(self):
+        """Populate the orders from the database. Only orders created after the 
+        trading day start time are loaded. By loading orders and setting 
+        already_handled to False, we can ensure that the orders are processed 
+        again and dont have to load the positions from the database.
+        """
+        logging.info("PortfolioManager: Populating orders from database.")
+
+        raw_orders = self.db.get_all_orders_and_positions()['orders']
+        logging.debug(f"PortfolioManager: Raw orders found: {len(raw_orders)}")
+
+        trading_day_start = trading_day_start_time(self.config.trading_start_time, self.config.timezone)
+
+        loaded_orders = []
+        for order in raw_orders:
+            if order['created_timestamp'] > trading_day_start:
+                loaded_orders.append(order_from_dict(order))
+
+        logging.debug(f"Loaded {len(loaded_orders)} orders from database.")
+        self.orders = [list(zip(loaded_orders, [False] * len(loaded_orders)))]
