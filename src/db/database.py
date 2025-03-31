@@ -62,6 +62,24 @@ class Database:
                         created_timestamp TIMESTAMP NOT NULL
                     )
                 ''')
+                # Create order_status table
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS order_status (
+                        order_id INTEGER PRIMARY KEY,
+                        status TEXT NOT NULL,
+                        filled INTEGER NOT NULL,
+                        remaining INTEGER NOT NULL,
+                        avg_fill_price REAL,
+                        last_fill_price REAL,
+                        parent_id INTEGER,
+                        why_held TEXT,
+                        mkt_cap_price REAL,
+                        perm_id INTEGER,
+                        client_id INTEGER,
+                        last_modified TIMESTAMP NOT NULL,
+                        FOREIGN KEY (order_id) REFERENCES orders(order_id)
+                    )
+                ''')
                 conn.commit()
                 logging.info("Database initialized successfully")
         except Exception as e:
@@ -406,4 +424,147 @@ class Database:
         except Exception as e:
             logging.error(f"DB: Error getting trading pauses from database: {str(e)}")
             return []
+
+    def add_order_status(self, order_id: int, status_dict: dict):
+        """Add a new order status to the database
         
+        Args:
+            order_id (int): The order ID
+            status_dict (dict): Dictionary containing order status fields
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                current_time = pd.Timestamp.now(tz=self.timezone)
+                
+                cursor.execute('''
+                    INSERT INTO order_status (
+                        order_id, status, filled, remaining, avg_fill_price,
+                        last_fill_price, parent_id, why_held, mkt_cap_price,
+                        perm_id, client_id, last_modified
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    order_id,
+                    status_dict['status'],
+                    status_dict['filled'],
+                    status_dict['remaining'],
+                    status_dict['avg_fill_price'],
+                    status_dict['last_fill_price'],
+                    status_dict['parent_id'],
+                    status_dict['why_held'],
+                    status_dict['mkt_cap_price'],
+                    status_dict['perm_id'],
+                    status_dict['client_id'],
+                    current_time.isoformat()
+                ))
+                
+                conn.commit()
+                logging.info(f"Added status for order {order_id}")
+                return True
+        except Exception as e:
+            logging.error(f"DB: Error adding order status: {str(e)}")
+            return False
+
+    def update_order_status(self, order_id: int, status_dict: dict):
+        """Update an existing order status in the database
+        
+        Args:
+            order_id (int): The order ID
+            status_dict (dict): Dictionary containing order status fields
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                current_time = pd.Timestamp.now(tz=self.timezone)
+                
+                cursor.execute('''
+                    UPDATE order_status SET
+                        status = ?,
+                        filled = ?,
+                        remaining = ?,
+                        avg_fill_price = ?,
+                        last_fill_price = ?,
+                        parent_id = ?,
+                        why_held = ?,
+                        mkt_cap_price = ?,
+                        perm_id = ?,
+                        client_id = ?,
+                        last_modified = ?
+                    WHERE order_id = ?
+                ''', (
+                    status_dict['status'],
+                    status_dict['filled'],
+                    status_dict['remaining'],
+                    status_dict['avg_fill_price'],
+                    status_dict['last_fill_price'],
+                    status_dict['parent_id'],
+                    status_dict['why_held'],
+                    status_dict['mkt_cap_price'],
+                    status_dict['perm_id'],
+                    status_dict['client_id'],
+                    current_time.isoformat(),
+                    order_id
+                ))
+                
+                conn.commit()
+                logging.info(f"Updated status for order {order_id}")
+                return True
+        except Exception as e:
+            logging.error(f"DB: Error updating order status: {str(e)}")
+            return False
+
+    def get_order_status(self, order_id: int):
+        """Get the status of an order from the database
+        
+        Args:
+            order_id (int): The order ID
+            
+        Returns:
+            dict: Dictionary containing order status fields, or None if not found
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT * FROM order_status WHERE order_id = ?', (order_id,))
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        'order_id': row[0],
+                        'status': row[1],
+                        'filled': row[2],
+                        'remaining': row[3],
+                        'avg_fill_price': row[4],
+                        'last_fill_price': row[5],
+                        'parent_id': row[6],
+                        'why_held': row[7],
+                        'mkt_cap_price': row[8],
+                        'perm_id': row[9],
+                        'client_id': row[10],
+                        'last_modified': pd.Timestamp(row[11])
+                    }
+                return None
+        except Exception as e:
+            logging.error(f"DB: Error getting order status: {str(e)}")
+            return None
+
+    def get_all_order_statuses(self):
+        """Get all order statuses from the database
+        
+        Returns:
+            dict: Dictionary mapping order IDs to their status dictionaries
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT order_id FROM order_status')
+                order_ids = [row[0] for row in cursor.fetchall()]
+                
+                return {
+                    order_id: self.get_order_status(order_id)
+                    for order_id in order_ids
+                    if self.get_order_status(order_id) is not None
+                }
+                
+        except Exception as e:
+            logging.error(f"DB: Error getting all order statuses: {str(e)}")
+            return {}
