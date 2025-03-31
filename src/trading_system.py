@@ -1,3 +1,4 @@
+from src.utilities.logger import Logger
 import time
 import copy
 from datetime import datetime
@@ -87,9 +88,17 @@ class TradingSystem:
         loop_sleep_time = 30
         realtime_bars_subscribed = False
         self.bar_req_id = None
+        previous_day = pd.Timestamp.now(tz=self.config.timezone).date()
+
 
         while True:
             logging.info(f"Starting trading loop")
+
+            current_day = pd.Timestamp.now(tz=self.config.timezone).date()
+            if current_day > previous_day:
+                Logger() # Create new log file for new day to avoid excessively large log files
+                previous_day = current_day
+
 
             if not self.risk_manager.is_trading_day():
                 logging.warning("Not a trading day. Waiting...")
@@ -183,12 +192,11 @@ class TradingSystem:
             self.market_data = pd.concat([self.market_data, new_bars_df])
             self.market_data = self.market_data[~self.market_data.index.duplicated(keep='last')]
             self.market_data.sort_index(inplace=True)
-
-        logging.info(f"Market data: {self.market_data.tail(10)}")
             
         signal = self.strategy.generate_signals(self.market_data, self.config)
         signal = Signal.BUY #for testing
 
+        logging.info(f"Market data tail: {self.market_data.tail(10)}")
         logging.info(f"Signal generated: {signal.name}")
 
         if (self.portfolio_manager.contract_count_from_open_positions() == 0 and 

@@ -8,7 +8,7 @@ class Logger:
     def __init__(self):
         output_path = os.path.join(os.getcwd(), "output")
         timestmp = datetime.now()
-        filename_timestmp = os.path.join(output_path, f"Logger_{timestmp.strftime('%d%m%Y_%H%M%S')}.log")
+        filename_timestmp = os.path.join(output_path, f"Logger_{timestmp.strftime('%d%m%Y')}.log")
 
         if not os.path.exists(output_path):
             os.makedirs(output_path)

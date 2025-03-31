@@ -44,7 +44,7 @@ class IBConnection(EWrapper, EClient):
         self.pnl_data = {}
         self.account_summary = {}
         self.position_data = {}
-        self.order_statuses = {}
+        self._order_statuses = {}
         self.open_orders = {}
         self.realtime_bars = {}
 
@@ -55,6 +55,9 @@ class IBConnection(EWrapper, EClient):
         # Lock to ensure thread-safe operations for tracking request ids
         self.lock = threading.Lock()
 
+    @property
+    def order_statuses(self):
+        return self._order_statuses
 
     def connect(self):
         """Connect to Interactive Brokers TWS/Gateway"""
@@ -243,15 +246,15 @@ class IBConnection(EWrapper, EClient):
 
         order.orderId = order_id
         
-        self.order_statuses[order_id] = {}
+        self._order_statuses[order_id] = {}
         self.placeOrder(order_id, contract, order)
 
         timeout = self.timeout
-        while not self.order_statuses[order_id] and timeout > 0:
+        while not self._order_statuses[order_id] and timeout > 0:
             time.sleep(0.1)
             timeout -= 0.1
 
-        trading_order.update_post_fill(status=self.order_statuses[order_id].get('status', None), order_id=order_id)
+        trading_order.update_post_fill(status=self._order_statuses[order_id].get('status', None), order_id=order_id)
 
 
     def place_market_order(self, contract, action, quantity):
@@ -264,22 +267,22 @@ class IBConnection(EWrapper, EClient):
         order_id = self.next_order_id
         self.next_order_id += 1
         
-        self.order_statuses[order_id] = {}
+        self._order_statuses[order_id] = {}
         self.placeOrder(order_id, contract, order)
 
         timeout = self.timeout
-        while not self.order_statuses[order_id] and timeout > 0:
+        while not self._order_statuses[order_id] and timeout > 0:
             time.sleep(0.1)
             timeout -= 0.1
 
-        return order_id, self.order_statuses[order_id]
+        return order_id, self._order_statuses[order_id]
 
     def orderStatus(self, orderId: int, status: str, filled: float,
                    remaining: float, avgFillPrice: float, permId: int,
                    parentId: int, lastFillPrice: float, clientId: int,
                    whyHeld: str, mktCapPrice: float):
         """Callback for order status updates"""
-        self.order_statuses[orderId] = {
+        self._order_statuses[orderId] = {
                 'status': status,
                 'filled': filled,
                 'remaining': remaining,
@@ -294,8 +297,8 @@ class IBConnection(EWrapper, EClient):
 
     def get_order_status(self, order_id: int) -> dict:
         """Get the current status of an order"""
-        if order_id in self.order_statuses:
-            return self.order_statuses[order_id]
+        if order_id in self._order_statuses:
+            return self._order_statuses[order_id]
         else:
             logging.error(f"IBKR API: Order {order_id} not found in order_statuses")
             return None
@@ -316,15 +319,15 @@ class IBConnection(EWrapper, EClient):
         order_id = self.next_order_id
         self.next_order_id += 1
         
-        self.order_statuses[order_id] = {}
+        self._order_statuses[order_id] = {}
         self.placeOrder(order_id, contract, order)
 
         timeout = self.timeout
-        while not self.order_statuses[order_id] and timeout > 0:
+        while not self._order_statuses[order_id] and timeout > 0:
             time.sleep(0.1)
             timeout -= 0.1
 
-        return order_id, self.order_statuses[order_id]
+        return order_id, self._order_statuses[order_id]
 
     def place_profit_taker_order(self, contract, parent_order_id, quantity, profit_price):
         """Place a profit-taking limit order"""
@@ -338,15 +341,15 @@ class IBConnection(EWrapper, EClient):
         order_id = self.next_order_id
         self.next_order_id += 1
         
-        self.order_statuses[order_id] = {}
+        self._order_statuses[order_id] = {}
         self.placeOrder(order_id, contract, order)
 
         timeout = self.timeout
-        while not self.order_statuses[order_id] and timeout > 0:
+        while not self._order_statuses[order_id] and timeout > 0:
             time.sleep(0.1)
             timeout -= 0.1
 
-        return order_id, self.order_statuses[order_id]
+        return order_id, self._order_statuses[order_id]
 
     def error(self, req_id, error_code, error_string, misc=None):
 
@@ -508,11 +511,11 @@ class IBConnection(EWrapper, EClient):
     def place_orders(self, orders:list[Order], contract:Contract):
         """Place multiple orders"""
         for order in orders:
-            self.order_statuses[order.orderId] = {}
+            self._order_statuses[order.orderId] = {}
             self.placeOrder(order.orderId, contract, order)
 
             timeout = self.timeout
-            while not self.order_statuses[order.orderId] and timeout > 0:
+            while not self._order_statuses[order.orderId] and timeout > 0:
                 time.sleep(0.1)
                 timeout -= 0.1
 

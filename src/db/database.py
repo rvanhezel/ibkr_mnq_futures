@@ -48,7 +48,6 @@ class Database:
                         expiry TEXT NOT NULL,
                         quantity INTEGER NOT NULL,
                         avg_price REAL NOT NULL,
-                        status TEXT NOT NULL,
                         time_opened TIMESTAMP NOT NULL,
                         created_timestamp TIMESTAMP NOT NULL
                     )
@@ -117,7 +116,7 @@ class Database:
                         current_time.isoformat()
                     ))
                     conn.commit()
-                    logging.info(f"Added order {cur_order.orderId} to database")
+                    logging.debug(f"Added order {cur_order.orderId} to database")
 
             except Exception as e:
                 logging.error(f"DB: Error adding order to database: {str(e)}")
@@ -158,8 +157,8 @@ class Database:
                 cursor.execute('''
                     INSERT INTO positions (
                         contract_id, ticker, security, currency, expiry,
-                        quantity, avg_price, status, time_opened, created_timestamp
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        quantity, avg_price, time_opened, created_timestamp
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     position.contract_id,
                     position.ticker,
@@ -168,7 +167,6 @@ class Database:
                     position.expiry,
                     position.quantity,
                     position.avg_price,
-                    position.status,
                     position.time_opened.isoformat(),
                     current_time.isoformat()
                 ))
@@ -195,9 +193,8 @@ class Database:
                         'expiry': row[4],
                         'quantity': row[5],
                         'avg_price': row[6],
-                        'status': row[7],
-                        'time_opened': pd.Timestamp(row[8]),
-                        'created_timestamp': pd.Timestamp(row[9])
+                        'time_opened': pd.Timestamp(row[7]),
+                        'created_timestamp': pd.Timestamp(row[8])
                     }
                 return None
         except Exception as e:
@@ -288,7 +285,6 @@ class Database:
                         expiry = ?,
                         quantity = ?,
                         avg_price = ?,
-                        status = ?,
                         time_opened = ?
                     WHERE contract_id = ?
                 ''', (
@@ -298,7 +294,6 @@ class Database:
                     position.expiry,
                     position.quantity,
                     position.avg_price,
-                    position.status,
                     position.time_opened.isoformat(),
                     position.contract_id
                 ))
@@ -446,8 +441,8 @@ class Database:
                 ''', (
                     order_id,
                     status_dict['status'],
-                    status_dict['filled'],
-                    status_dict['remaining'],
+                    int(status_dict['filled']),
+                    int(status_dict['remaining']),
                     status_dict['avg_fill_price'],
                     status_dict['last_fill_price'],
                     status_dict['parent_id'],
@@ -459,7 +454,7 @@ class Database:
                 ))
                 
                 conn.commit()
-                logging.info(f"Added status for order {order_id}")
+                logging.debug(f"Added status for order {order_id} to DB")
                 return True
         except Exception as e:
             logging.error(f"DB: Error adding order status: {str(e)}")
