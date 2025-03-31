@@ -1,3 +1,4 @@
+import pandas as pd
 from typing import List, Dict, Optional
 from ibapi.order import Order
 from ibapi.contract import Contract
@@ -185,6 +186,10 @@ class PortfolioManager:
 
         mid_price = self.api.get_latest_mid_price(contract)
 
+        if mid_price is None:
+            logging.error(f"No mid price found for contract {contract.symbol}. Cannot place bracket order.")
+            return
+        
         stop_loss_price = mid_price - (self.config.stop_loss_ticks * self.config.mnq_tick_size)
         take_profit_limit_price = mid_price + (self.config.take_profit_ticks * self.config.mnq_tick_size)
 
@@ -209,8 +214,6 @@ class PortfolioManager:
 
             self.db.print_all_entries()
 
-            a = 5
-
         else:
             logging.error("Failed to place all orders.")
             for order in bracket:
@@ -234,11 +237,6 @@ class PortfolioManager:
 
     def contract_count_from_open_positions(self):
         return sum(position.quantity for position in self.positions if position.status == "OPEN")
-
-    # def populate_from_db(self):
-    #     """Populate the portfolio from the database"""
-    #     self.positions = self.db.get_positions()
-    #     self.orders = self.db.get_orders()
 
     def check_cancelled_market_order(self):
         """Check for cancelled market orders and resubmit them if required."""
@@ -426,7 +424,8 @@ class PortfolioManager:
 
         loaded_orders = []
         for order in raw_orders:
-            if order['created_timestamp'] > trading_day_start:
+            time_created = pd.to_datetime(order['created_timestamp'])
+            if time_created > trading_day_start:
                 loaded_orders.append(order_from_dict(order))
 
         logging.debug(f"Loaded {len(loaded_orders)} orders from database.")

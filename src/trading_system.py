@@ -1,4 +1,5 @@
 import time
+import copy
 from datetime import datetime
 import pytz
 from src.risk_manager import RiskManager
@@ -18,7 +19,12 @@ from src.portfolio.portfolio_manager import PortfolioManager
 class TradingSystem:
 
     def __init__(self, cfg: Configuration):
-        self.api = IBConnection(cfg.ib_host, cfg.ib_port, cfg.ib_client_id, cfg.timeout)
+        self.api = IBConnection(
+            cfg.ib_host, 
+            cfg.ib_port, 
+            cfg.ib_client_id, 
+            cfg.timeout,
+            cfg.timezone)
         self.risk_manager = RiskManager(
             cfg.timezone, 
             cfg.trading_start_time, 
@@ -79,6 +85,8 @@ class TradingSystem:
     def _trading_loop(self):
         """Main trading loop"""
         loop_sleep_time = 30
+        realtime_bars_subscribed = False
+        self.bar_req_id = None
 
         while True:
             logging.info(f"Starting trading loop")
@@ -98,6 +106,13 @@ class TradingSystem:
                 logging.warning("Trading paused triggered. Waiting...")
                 time.sleep(60)
                 continue
+
+            if not realtime_bars_subscribed:
+                logging.info("Subscribing to realtime bars")
+                self.bar_req_id = self.api.req_realtime_bars(
+                    self.portfolio_manager.get_current_contract(), 
+                    False)
+                realtime_bars_subscribed = True 
 
             # Update or create positions from open orders
             self.portfolio_manager.update_positions()
@@ -153,6 +168,10 @@ class TradingSystem:
                                                    str(self.config.horizon), 
                                                    str(self.config.bar_size),
                                                    self.config.timezone)
+        if self.bar_req_id:
+            realtime_bars = copy.deepcopy(self.api.realtime_bars[self.bar_req_id])
+            self.api.realtime_bars[self.bar_req_id] = []
+            logging.info(f"Latest realtime 5s bars: {realtime_bars[-5:-1]}")
 
         if new_bars_df.empty:
             logging.warning("No historical data available")
@@ -167,7 +186,7 @@ class TradingSystem:
 
         logging.info(f"Market data: {self.market_data.tail(10)}")
             
-        # signal = self.strategy.generate_signals(self.market_data, self.config)
+        signal = self.strategy.generate_signals(self.market_data, self.config)
         signal = Signal.BUY #for testing
 
         logging.info(f"Signal generated: {signal.name}")

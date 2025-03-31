@@ -13,12 +13,12 @@ import socket
 import pandas as pd
 import os
 from src.portfolio.trading_order import TradingOrder
-from src.utilities.utils import get_third_friday
+from src.utilities.utils import get_third_friday, get_local_timezone
 
 
 class IBConnection(EWrapper, EClient):
     
-    def __init__(self, host, port, client_id, timeout):
+    def __init__(self, host, port, client_id, timeout, timezone):
         # Suppress IBKR API's internal debug messages
         logging.getLogger('ibapi').setLevel(logging.WARNING)
         logging.getLogger('ibapi.wrapper').setLevel(logging.WARNING)
@@ -29,7 +29,10 @@ class IBConnection(EWrapper, EClient):
         self.port = port
         self.client_id = client_id
         self.timeout = timeout
+        self.timezone = timezone
         self.account_id = os.getenv('IBKR_ACCOUNT_ID')
+
+        self.local_timezone = get_local_timezone()
 
         # Order ID and Request ID needed for the IBKR API
         self.next_order_id = None
@@ -43,6 +46,7 @@ class IBConnection(EWrapper, EClient):
         self.position_data = {}
         self.order_statuses = {}
         self.open_orders = {}
+        self.realtime_bars = {}
 
         # self.current_contract = None
         self.connected = False
@@ -290,7 +294,11 @@ class IBConnection(EWrapper, EClient):
 
     def get_order_status(self, order_id: int) -> dict:
         """Get the current status of an order"""
-        return self.order_statuses.get(order_id, None)
+        if order_id in self.order_statuses:
+            return self.order_statuses[order_id]
+        else:
+            logging.error(f"IBKR API: Order {order_id} not found in order_statuses")
+            return None
     
     def update_order_status(self, order: TradingOrder):
         """Update the status of an order"""
@@ -590,18 +598,28 @@ class IBConnection(EWrapper, EClient):
         """Cancel a specific order by its ID. OrderStatus callback is used"""
         self.cancelOrder(order_id, OrderCancel())
   
+    def req_realtime_bars(self, contract, use_rth):
+        """Request real-time 5s bars"""
+        req_id = self.get_next_req_id()
+        self.realtime_bars[req_id] = []
+        self.reqRealTimeBars(req_id, contract, 5, "TRADES", use_rth, [])
+        return req_id
 
     def realtimeBar(self, reqId, time, open_, high, low, close, volume, wap, count):
+        """Callback for 5s real-time bars"""
         # Convert Unix timestamp to pandas Timestamp
         timestamp = pd.Timestamp.fromtimestamp(time)
-        print(
-            f"ReqId: {reqId}, "
-            f"Time: {timestamp}, "
-            f"Open: {open_}, "
-            f"High: {high}, "
-            f"Low: {low}, "
-            f"Close: {close}, "
-            f"Volume: {volume}, "
-            f"Wap: {wap}, "
-            f"Count: {count}"
-        )
+        timestamp = timestamp.tz_localize(self.local_timezone)
+        timestamp = timestamp.tz_convert(self.timezone)
+        self.realtime_bars[reqId].append({
+            'timestamp': timestamp,
+            'open': open_,
+            'high': high,
+            'low': low,
+            'close': close,
+            'volume': volume,
+            'wap': wap,
+            'count': count
+        })
+
+

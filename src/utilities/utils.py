@@ -6,6 +6,8 @@ from dateutil import relativedelta
 import pytz
 import holidays
 import configparser
+import os
+import datetime
 
 
 def get_third_friday(year, month, timezone):
@@ -115,3 +117,39 @@ def trading_day_start_time(start_time: str, timezone: str) -> pd.Timestamp:
         return today_start
     else:
         return today_start - pd.Timedelta(days=1)
+
+def get_local_timezone() -> str:
+        local_tz = datetime.datetime.now().astimezone().tzinfo.tzname(None)
+        
+        # Convert to IANA timezone name
+        if os.name == 'nt':  # Windows
+            # Windows timezone mapping
+            windows_to_iana = {
+                'EST': 'US/Eastern',
+                'CST': 'US/Central',
+                'MST': 'US/Mountain',
+                'PST': 'US/Pacific',
+                'HST': 'Pacific/Honolulu',
+                'AKST': 'America/Anchorage',
+                'AST': 'America/Puerto_Rico',
+                'EAT': 'Africa/Nairobi',
+                'CAT': 'Africa/Harare',
+                'WAT': 'Africa/Lagos',
+                'SAST': 'Africa/Johannesburg',
+                'EET': 'Europe/Istanbul',
+                'CET': 'Europe/Paris',
+                'W. Europe Daylight Time': 'Europe/Amsterdam',
+                'WET': 'Europe/London',
+                'GMT': 'UTC',
+                'UTC': 'UTC'
+            }
+
+            if local_tz in windows_to_iana:
+                return windows_to_iana[local_tz]
+            else:
+                logging.warning(f"Windows timezone {local_tz} not found in mapping. Defaulting to UTC.")
+                return 'UTC'
+        else:
+            logging.warning(f"Unix-like non-supported system detected. Defaulting to UTC.")
+            return 'UTC'
+
