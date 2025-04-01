@@ -1,65 +1,91 @@
-2025-04-01 14:51:21,290.290 - INFO - Logger initialized
-2025-04-01 14:51:21,292.292 - DEBUG - RiskManager: Checking trading day. Current timestamp: 2025-04-01 07:51:21.288718-05:00
-2025-04-01 14:51:21,405.405 - DEBUG - RiskManager: Checking trading time. Current timestamp: 2025-04-01 07:51:21.288718-05:00
-2025-04-01 14:51:21,405.405 - INFO - PortfolioManager: Updating positions from orders.
-2025-04-01 14:51:21,405.405 - DEBUG - PortfolioManager: There are 0 orders
-2025-04-01 14:51:21,406.406 - DEBUG - Order statuses: 0 filled, 0 cancelled, 0 pending
-2025-04-01 14:51:21,407.407 - INFO - PortfolioManager: Finished updating positions from orders. Currently 0 position(s).
-2025-04-01 14:51:21,407.407 - DEBUG - Checking for cancelled market orders.
-2025-04-01 14:51:21,407.407 - DEBUG - No cancelled orders found.
-2025-04-01 14:51:21,408.408 - DEBUG - Checking PnL for trading pause.
-2025-04-01 14:51:21,408.408 - DEBUG - PnL: 0
-2025-04-01 14:51:21,409.409 - DEBUG - Checking for trading opportunities.
-2025-04-01 14:51:21,999.999 - DEBUG - Generating signals for Bollinger Band RSI strategy.
-2025-04-01 14:51:22,006.006 - DEBUG - HOLD signal generated.
-2025-04-01 14:51:22,015.015 - INFO - Market data tail:                                open      high       low     close volume   bb_middle      bb_upper      bb_lower        rsi
+2025-04-01 14:57:30,207.207 - INFO - Logger initialized
+2025-04-01 14:57:30,244.244 - INFO - Initializing database
+2025-04-01 14:57:30,261.261 - INFO - Database initialized successfully
+2025-04-01 14:57:30,263.263 - INFO - Configuration saved to C:\Users\raoul\Documents\UpworkProjects\ibkr_mnq_futures\output\config_01042025.cfg
+2025-04-01 14:57:30,264.264 - INFO - Starting trading system...
+2025-04-01 14:57:30,264.264 - INFO - Paper trading mode enabled
+2025-04-01 14:57:30,270.270 - INFO - (2104) Market data farm connection is OK:usfarm.nj 
+2025-04-01 14:57:30,270.270 - INFO - (2104) Market data farm connection is OK:usfuture 
+2025-04-01 14:57:30,270.270 - INFO - (2104) Market data farm connection is OK:cashfarm 
+2025-04-01 14:57:30,271.271 - INFO - (2104) Market data farm connection is OK:usfarm 
+2025-04-01 14:57:30,271.271 - INFO - (2106) HMDS data farm connection is OK:euhmds 
+2025-04-01 14:57:30,271.271 - INFO - (2106) HMDS data farm connection is OK:fundfarm 
+2025-04-01 14:57:30,271.271 - INFO - (2106) HMDS data farm connection is OK:ushmds 
+2025-04-01 14:57:30,271.271 - INFO - (2158) Sec-def data farm connection is OK:secdefil 
+2025-04-01 14:57:30,369.369 - INFO - Successfully connected to Interactive Brokers
+2025-04-01 14:57:30,370.370 - INFO - PortfolioManager: Populating orders from database.
+2025-04-01 14:57:30,376.376 - DEBUG - PortfolioManager: Raw orders found: 0
+2025-04-01 14:57:30,377.377 - DEBUG - Loaded 0 orders from database.
+2025-04-01 14:57:30,377.377 - INFO - PortfolioManager: Populating order statuses from database.
+2025-04-01 14:57:30,379.379 - DEBUG - PortfolioManager: Raw order statuses found: 0
+2025-04-01 14:57:30,379.379 - DEBUG - Loaded 0 order statuses from database.
+2025-04-01 14:57:30,380.380 - INFO - PortfolioManager: Populating positions from database.
+2025-04-01 14:57:30,380.380 - DEBUG - PortfolioManager: Raw positions found: 0
+2025-04-01 14:57:30,380.380 - DEBUG - Loaded 0 positions from database.
+2025-04-01 14:57:30,381.381 - INFO - RiskManager: Populating trading pause times from DB
+2025-04-01 14:57:30,382.382 - INFO - No trading pauses found in database
+2025-04-01 14:57:30,382.382 - INFO - Starting trading loop
+2025-04-01 14:57:30,382.382 - DEBUG - RiskManager: Checking trading day. Current timestamp: 2025-04-01 07:57:30.382882-05:00
+2025-04-01 14:57:30,475.475 - DEBUG - RiskManager: Checking trading time. Current timestamp: 2025-04-01 07:57:30.382882-05:00
+2025-04-01 14:57:30,475.475 - INFO - PortfolioManager: Updating positions from orders.
+2025-04-01 14:57:30,476.476 - DEBUG - PortfolioManager: There are 0 orders
+2025-04-01 14:57:30,476.476 - DEBUG - Order statuses: 0 filled, 0 cancelled, 0 pending
+2025-04-01 14:57:30,476.476 - INFO - PortfolioManager: Finished updating positions from orders. Currently 0 position(s).
+2025-04-01 14:57:30,477.477 - DEBUG - Checking for cancelled market orders.
+2025-04-01 14:57:30,477.477 - DEBUG - No cancelled orders found.
+2025-04-01 14:57:30,477.477 - DEBUG - Checking PnL for trading pause.
+2025-04-01 14:57:30,477.477 - DEBUG - PnL: 0
+2025-04-01 14:57:30,478.478 - DEBUG - Checking for trading opportunities.
+2025-04-01 14:57:31,068.068 - DEBUG - Generating signals for Bollinger Band RSI strategy.
+2025-04-01 14:57:31,071.071 - DEBUG - HOLD signal generated.
+2025-04-01 14:57:31,078.078 - INFO - Market data tail:                                open      high       low     close volume   bb_middle      bb_upper      bb_lower        rsi
 datetime                                                                                                                   
-2025-04-01 07:42:00-05:00  19365.25  19367.00  19355.00  19366.00    909  19362.9500  19381.186365  19344.713635  51.349228
-2025-04-01 07:43:00-05:00  19365.75  19370.00  19362.50  19363.25    730  19363.7250  19380.576484  19346.873516  49.556619
-2025-04-01 07:44:00-05:00  19362.75  19367.00  19358.50  19364.75    741  19364.3250  19380.407677  19348.242323  50.570258
-2025-04-01 07:45:00-05:00  19365.75  19372.50  19358.75  19365.25    903  19365.2000  19379.370921  19351.029079  50.924262
-2025-04-01 07:46:00-05:00  19365.25  19372.75  19361.75  19371.50    648  19366.1625  19379.258563  19353.066437  55.239553
-2025-04-01 07:47:00-05:00  19370.75  19374.25  19369.50  19371.50    415  19366.9875  19379.217049  19354.757951  55.239553
 2025-04-01 07:48:00-05:00  19371.00  19372.25  19355.75  19358.25   1262  19367.2000  19378.641809  19355.758191  45.419928
 2025-04-01 07:49:00-05:00  19358.75  19369.50  19356.50  19369.25    574  19367.7375  19378.482819  19356.992181  52.904778
 2025-04-01 07:50:00-05:00  19368.50  19388.25  19368.25  19387.00   1567  19369.0750  19382.163258  19355.986742  61.968099
-2025-04-01 07:51:00-05:00  19387.25  19388.50  19382.00  19382.75    595  19369.5125  19383.763355  19355.261645  59.038417
-2025-04-01 14:51:22,015.015 - INFO - Signal generated: BUY
-2025-04-01 14:51:22,016.016 - DEBUG - Placing bracket order.
-2025-04-01 14:51:22,217.217 - DEBUG - STP price: 19353.25, LMT price: 19458.25
-2025-04-01 14:51:28,617.617 - INFO - All orders were accepted by the API.
-2025-04-01 14:51:28,628.628 - DEBUG - Adding order to database: 934,0,0: MKT BUY 2.000000@ 
-2025-04-01 14:51:28,637.637 - DEBUG - Added order 934 to database
-2025-04-01 14:51:28,638.638 - DEBUG - Adding order to database: 935,0,0: LMT SELL 2.000000@19458.25 
-2025-04-01 14:51:28,645.645 - DEBUG - Added order 935 to database
-2025-04-01 14:51:28,646.646 - DEBUG - Adding order to database: 936,0,0: STP SELL 2.000000@ 
-2025-04-01 14:51:28,652.652 - DEBUG - Added order 936 to database
-2025-04-01 14:51:28,659.659 - DEBUG - Added status for order 934 to DB
-2025-04-01 14:51:28,664.664 - DEBUG - Added status for order 935 to DB
-2025-04-01 14:51:28,668.668 - DEBUG - Added status for order 936 to DB
-2025-04-01 14:51:28,668.668 - INFO - PortfolioManager: Updating positions from orders.
-2025-04-01 14:51:28,669.669 - DEBUG - PortfolioManager: There are 3 orders
-2025-04-01 14:51:28,669.669 - INFO - Order: 934,0,0: MKT BUY 2.000000@ 
-2025-04-01 14:51:28,669.669 - INFO - Order: 935,0,0: LMT SELL 2.000000@19458.25 
-2025-04-01 14:51:28,669.669 - INFO - Order: 936,0,0: STP SELL 2.000000@ 
-2025-04-01 14:51:28,669.669 - DEBUG - Order statuses: 1 filled, 0 cancelled, 2 pending
-2025-04-01 14:51:28,669.669 - INFO - Buy order filled, creating new position.
-2025-04-01 14:51:28,675.675 - INFO - Added position 1 to database
-2025-04-01 14:51:28,675.675 - INFO - PortfolioManager: Finished updating positions from orders. Currently 1 position(s).
-2025-04-01 14:51:28,675.675 - INFO - Position(
+2025-04-01 07:51:00-05:00  19387.25  19389.25  19382.00  19388.25   1004  19369.7875  19385.213351  19354.361649  62.515193
+2025-04-01 07:52:00-05:00  19388.00  19392.75  19386.00  19391.25   1038  19370.7250  19388.755460  19352.694540  63.858921
+2025-04-01 07:53:00-05:00  19390.75  19392.25  19381.75  19382.25    784  19371.3125  19390.028052  19352.596948  57.230783
+2025-04-01 07:54:00-05:00  19382.25  19384.25  19376.00  19382.00    858  19372.0000  19391.218481  19352.781519  57.053636
+2025-04-01 07:55:00-05:00  19382.25  19391.75  19380.25  19386.50    946  19372.3750  19392.400921  19352.349079  59.484624
+2025-04-01 07:56:00-05:00  19387.00  19390.50  19384.50  19387.50    549  19373.4375  19394.288684  19352.586316  60.026131
+2025-04-01 07:57:00-05:00  19387.25  19387.25  19383.00  19385.75    268  19374.6875  19395.342932  19354.032068  58.551294
+2025-04-01 14:57:31,079.079 - INFO - Signal generated: BUY
+2025-04-01 14:57:31,079.079 - DEBUG - Placing bracket order.
+2025-04-01 14:57:31,281.281 - DEBUG - STP price: 19355.5, LMT price: 19460.5
+2025-04-01 14:57:37,706.706 - INFO - All orders were accepted by the API.
+2025-04-01 14:57:37,713.713 - DEBUG - Adding order to database: 937,0,0: MKT BUY 2.000000@ 
+2025-04-01 14:57:37,747.747 - DEBUG - Added order 937 to database
+2025-04-01 14:57:37,748.748 - DEBUG - Adding order to database: 938,0,0: LMT SELL 2.000000@19460.5 
+2025-04-01 14:57:37,752.752 - DEBUG - Added order 938 to database
+2025-04-01 14:57:37,752.752 - DEBUG - Adding order to database: 939,0,0: STP SELL 2.000000@ 
+2025-04-01 14:57:37,762.762 - DEBUG - Added order 939 to database
+2025-04-01 14:57:37,766.766 - DEBUG - Added status for order 937 to DB
+2025-04-01 14:57:37,768.768 - DEBUG - Added status for order 938 to DB
+2025-04-01 14:57:37,771.771 - DEBUG - Added status for order 939 to DB
+2025-04-01 14:57:37,771.771 - INFO - PortfolioManager: Updating positions from orders.
+2025-04-01 14:57:37,771.771 - DEBUG - PortfolioManager: There are 3 orders
+2025-04-01 14:57:37,771.771 - INFO - Order: 937,0,0: MKT BUY 2.000000@ 
+2025-04-01 14:57:37,771.771 - INFO - Order: 938,0,0: LMT SELL 2.000000@19460.5 
+2025-04-01 14:57:37,772.772 - INFO - Order: 939,0,0: STP SELL 2.000000@ 
+2025-04-01 14:57:37,772.772 - DEBUG - Order statuses: 1 filled, 0 cancelled, 2 pending
+2025-04-01 14:57:37,772.772 - INFO - Buy order filled, creating new position.
+2025-04-01 14:57:37,778.778 - INFO - Added position 1 to database
+2025-04-01 14:57:37,778.778 - INFO - PortfolioManager: Finished updating positions from orders. Currently 1 position(s).
+2025-04-01 14:57:37,779.779 - INFO - Position(
   Ticker: MNQ
   Security: FUT
   Currency: USD
   Expiry: 20250620
   Contract ID: 691171685
   Quantity: 2
-  Avg Price: 19385.50 USD
-  Time Opened: 2025-04-01 07:51:28 CDT
-2025-04-01 14:51:28,678.678 - INFO - Saving market data to CSV file...
-2025-04-01 14:51:28,690.690 - INFO - Market data saved to C:\Users\raoul\Documents\UpworkProjects\ibkr_mnq_futures\output\market_data_MNQ_20250401.csv
-2025-04-01 14:51:28,691.691 - INFO - Trading loop complete. Sleeping for 30 seconds...
-2025-04-01 14:51:32,415.415 - INFO - KeyboardInterrupt - Shutting down trading system...
-2025-04-01 14:51:32,416.416 - INFO - Disconnected from Interactive Brokers
-2025-04-01 14:51:32,416.416 - INFO - Saving market data to CSV file...
-2025-04-01 14:51:32,425.425 - INFO - Market data saved to C:\Users\raoul\Documents\UpworkProjects\ibkr_mnq_futures\output\market_data_MNQ_20250401.csv
-2025-04-01 14:51:32,427.427 - INFO - Trading system shut down
+  Avg Price: 19387.25 USD
+  Time Opened: 2025-04-01 07:57:37 CDT
+2025-04-01 14:57:37,782.782 - INFO - Saving market data to CSV file...
+2025-04-01 14:57:37,794.794 - INFO - Market data saved to C:\Users\raoul\Documents\UpworkProjects\ibkr_mnq_futures\output\market_data_MNQ_20250401.csv
+2025-04-01 14:57:37,795.795 - INFO - Trading loop complete. Sleeping for 30 seconds...
+2025-04-01 14:57:52,175.175 - INFO - KeyboardInterrupt - Shutting down trading system...
+2025-04-01 14:57:52,176.176 - INFO - Disconnected from Interactive Brokers
+2025-04-01 14:57:52,177.177 - INFO - Saving market data to CSV file...
+2025-04-01 14:57:52,189.189 - INFO - Market data saved to C:\Users\raoul\Documents\UpworkProjects\ibkr_mnq_futures\output\market_data_MNQ_20250401.csv
+2025-04-01 14:57:52,189.189 - INFO - Trading system shut down

@@ -396,7 +396,7 @@ class PortfolioManager:
         self.positions = []
         self.order_statuses = {}
 
-    def populate_from_db(self):
+    def populate_from_db(self, check_state: bool = True):
         """Populate the orders from the database. Only orders created after the 
         trading day start time are loaded. By loading orders and setting 
         already_handled to False, we can ensure that the orders are processed 
@@ -457,33 +457,35 @@ class PortfolioManager:
         logging.debug(f"Loaded {len(self.positions)} positions from database.")
 
         # Check that the latest position from the DB actually still exists in IBKR
-        if len(self.positions) > 0:
-            latest_db_position = self.positions[-1]
-            matching_position = self.api.get_matching_position(latest_db_position)
+        if check_state:
+            if len(self.positions) > 0:
+                latest_db_position = self.positions[-1]
+                matching_position = self.api.get_matching_position(latest_db_position)
 
-            if matching_position is None:
-                msg = f"Inconsistent DB state: Position {latest_db_position.ticker} with quantity {latest_db_position.quantity}"
-                msg += f" from DB not found in IBKR. Reinitializing database and portfolio state."
-                logging.error(msg)
+                if matching_position is None:
+                    msg = f"Inconsistent DB state: Position {latest_db_position.ticker} with quantity {latest_db_position.quantity}"
+                    msg += f" from DB not found in IBKR. Reinitializing database and portfolio state."
+                    logging.error(msg)
 
-                self.cancel_all_orders()
-                self.clear_orders_statuses_positions()
-                self.db.reinitialize()
-                self.db.print_all_entries()
+                    self.cancel_all_orders()
+                    self.clear_orders_statuses_positions()
+                    self.db.reinitialize()
+                    self.db.print_all_entries()
 
+                elif latest_db_position.quantity > int(matching_position['position']):
+                    msg = f"Inconsistent DB state: Position {latest_db_position.ticker} has {latest_db_position.quantity} contracts."
+                    msg += f" Only {int(matching_position['position'])} contracts are found on IBKR."
+                    msg += f" Reinitializing database and portfolio state."
+                    logging.error(msg)
+                    
+                    self.cancel_all_orders()
+                    self.clear_orders_statuses_positions()
+                    self.db.reinitialize()
+                    self.db.print_all_entries()
+                else:
+                    logging.info("DB state consistent with IBKR.")
 
-            elif latest_db_position.quantity > int(matching_position['position']):
-                msg = f"Inconsistent DB state: Position {latest_db_position.ticker} has {latest_db_position.quantity} contracts."
-                msg += f" Only {int(matching_position['position'])} contracts are found on IBKR."
-                msg += f" Reinitializing database and portfolio state."
-                logging.error(msg)
-                
-                self.cancel_all_orders()
-                self.clear_orders_statuses_positions()
-                self.db.reinitialize()
-                self.db.print_all_entries()
-            else:
-                logging.info("DB state consistent with IBKR.")
+        return len(loaded_orders), len(self.order_statuses), len(self.positions)
 
 
 
