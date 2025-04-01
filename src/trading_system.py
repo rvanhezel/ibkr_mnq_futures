@@ -85,43 +85,32 @@ class TradingSystem:
             
     def _trading_loop(self):
         """Main trading loop"""
-        loop_sleep_time = 30
-        realtime_bars_subscribed = False
-        self.bar_req_id = None
         previous_day = pd.Timestamp.now(tz=self.config.timezone).date()
-
 
         while True:
             logging.info(f"Starting trading loop")
+            loop_sleep_time = 30
 
-            current_day = pd.Timestamp.now(tz=self.config.timezone).date()
-            if current_day > previous_day:
-                Logger() # Create new log file for new day to avoid excessively large log files
-                previous_day = current_day
+            now = pd.Timestamp.now(tz=self.config.timezone)
+            if now.date() > previous_day:
+                Logger(now.date()) # Create new log file for new day to avoid excessively large log files
+                previous_day = now.date()
 
-
-            if not self.risk_manager.is_trading_day():
+            if not self.risk_manager.is_trading_day(now):
                 logging.warning("Not a trading day. Waiting...")
                 time.sleep(60)
                 continue
                 
-            if not self.risk_manager.is_trading_hours():
+            if not self.risk_manager.is_trading_hours(now):
                 logging.warning("Outside trading hours. Waiting...")
-                self.portfolio_manager.clear_orders_and_positions()
+                self.portfolio_manager.clear_orders_statuses_positions()
                 time.sleep(60)
                 continue
             
-            if not self.risk_manager.can_resume_trading_after_pause():
+            if not self.risk_manager.can_resume_trading_after_pause(now):
                 logging.warning("Trading paused triggered. Waiting...")
                 time.sleep(60)
                 continue
-
-            # if not realtime_bars_subscribed:
-            #     logging.info("Subscribing to realtime bars")
-            #     self.bar_req_id = self.api.req_realtime_bars(
-            #         self.portfolio_manager.get_current_contract(), 
-            #         False)
-            #     realtime_bars_subscribed = True 
 
             # Update or create positions from open orders
             self.portfolio_manager.update_positions()
@@ -145,21 +134,11 @@ class TradingSystem:
             self._check_trading_opportunities()
 
             # Check if it's near end of trading day (3:59 PM or later)
-            current_time = pd.Timestamp.now(tz=self.config.timezone)
-            eod_cutoff = pd.Timestamp(
-                    current_time.year, 
-                    current_time.month, 
-                    current_time.day, 
-                    int(self.config.eod_exit_time[:2]),           
-                    int(self.config.eod_exit_time[2:]),           
-                    tz=self.config.timezone)
-            
-            if current_time >= eod_cutoff:
-                logging.info(f"Current time: {current_time} - End of day approaching - closing all positions and cancelling orders")
-                
-                self.portfolio_manager.cancel_all_orders()
-                self.portfolio_manager.close_all_positions()
-                loop_sleep_time = 5
+            if self.risk_manager.perform_eod_checks(
+                now, 
+                self.config.eod_exit_time, 
+                self.portfolio_manager):
+                loop_sleep_time = 15
 
             self._save_market_data()
 
@@ -176,10 +155,6 @@ class TradingSystem:
                                                    str(self.config.horizon), 
                                                    str(self.config.bar_size),
                                                    self.config.timezone)
-        # if self.bar_req_id:
-        #     realtime_bars = copy.deepcopy(self.api.realtime_bars[self.bar_req_id])
-        #     self.api.realtime_bars[self.bar_req_id] = []
-        #     logging.info(f"Latest realtime 5s bars: {realtime_bars[-5:-1]}")
 
         if new_bars_df.empty:
             logging.warning("No historical data available")

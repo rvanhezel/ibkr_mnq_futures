@@ -294,45 +294,6 @@ class PortfolioManager:
 
         if not found_cancelled_order:
             logging.debug("No cancelled orders found.")
-
-    # def _get_ibkr_position_from_contract(self, contract: Contract):
-    #     """Find the position that corresponds to the passed order by matching contract attributes.
-        
-    #     Args:
-    #         trading_order (TradingOrder): The order to find a matching position for
-            
-    #     Returns:
-    #         dict: The matching position from the API, or None if no match is found
-            
-    #     Raises:
-    #         Exception: If no matching position is found
-    #     """
-    #     positions = self.api.get_positions()
-        
-    #     matching_positions = []
-    #     for position in positions:
-    #         pos_contract = position['contract']
-            
-    #         # Match all relevant contract attributes
-    #         if (pos_contract.symbol == contract.symbol and
-    #             pos_contract.secType == contract.secType and
-    #             pos_contract.exchange == contract.exchange and
-    #             pos_contract.currency == contract.currency and
-    #             pos_contract.lastTradeDateOrContractMonth == contract.lastTradeDateOrContractMonth):
-                
-    #             matching_positions.append(position)
-        
-    #     if len(matching_positions) > 1:
-    #         logging.warning(f"Found multiple matching positions for contract.")
-    #         return matching_positions[0]
-        
-    #     elif len(matching_positions) == 1:
-    #         return matching_positions[0]
-        
-    #     else:
-    #         msg = f"No matching position found for contract."
-    #         logging.error(msg)
-    #         raise Exception(msg)
         
     def get_current_contract(self): 
         """Get the current contract"""

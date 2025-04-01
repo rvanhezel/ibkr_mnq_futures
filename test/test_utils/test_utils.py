@@ -20,21 +20,18 @@ class TestUtils:
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr('pandas.Timestamp.now', lambda tz=None: now_test_date)
 
-            result = trading_day_start_time_ts(start_time, self.timezone)
+            result = trading_day_start_time_ts(start_time, self.timezone, day_offset=0)
 
         assert result == expected_time
 
     def test_trading_day_start_time_evening(self):
         """Test trading day start time for evening trading"""
-        start_time = "1800"
-        expected_time = pd.Timestamp("2025-03-01 18:00:00", tz=self.timezone)
+        start_time = "2100"
+        expected_time = pd.Timestamp("2025-03-01 21:00:00", tz=self.timezone)
         now_test_date = pd.Timestamp("2025-03-02 11:00:00", tz=self.timezone)
 
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr('pandas.Timestamp.now', lambda tz=None: now_test_date)
 
-            result = trading_day_start_time_ts(start_time, self.timezone)
+            result = trading_day_start_time_ts(start_time, self.timezone, day_offset=-1)
         assert result == expected_time
-
-    def test_trading_day_start_time_edge_case(self):
-        """Test trading day start time for edge case"""
