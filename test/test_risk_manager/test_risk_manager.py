@@ -140,9 +140,9 @@ class TestRiskManager:
             eod_exit_time = "1559"
             ptf_manager = PortfolioManager(None, None, None)
 
-            assert risk_manager.perform_eod_checks(now, eod_exit_time, ptf_manager) == False
-            assert risk_manager.perform_eod_checks(edge_case, eod_exit_time, ptf_manager) == True
-            assert risk_manager.perform_eod_checks(later, eod_exit_time, ptf_manager) == True
+            assert risk_manager.perform_eod_close(now, eod_exit_time, ptf_manager) == False
+            assert risk_manager.perform_eod_close(edge_case, eod_exit_time, ptf_manager) == True
+            assert risk_manager.perform_eod_close(later, eod_exit_time, ptf_manager) == True
     
 
         

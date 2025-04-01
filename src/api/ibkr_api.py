@@ -473,7 +473,6 @@ class IBConnection(EWrapper, EClient):
         else:
             self.reqMktData(req_id, contract, "", False, False, [])
         
-        # Wait for market data
         timeout = self.timeout
         while req_id not in self.market_data and timeout > 0:
             time.sleep(0.1)
@@ -481,16 +480,22 @@ class IBConnection(EWrapper, EClient):
             
         if req_id in self.market_data:
             data = self.market_data[req_id]
-            # Calculate mid price from bid and ask
-            if data.get('bid') is not None and data.get('ask') is not None:
+
+            if data.get('bid') == -1 and data.get('ask') == -1:
+                self.cancelMktData(req_id)
+                return data['last']
+            
+            elif data.get('bid') is not None and data.get('ask') is not None:
                 mid_price = (data['bid'] + data['ask']) / 2
-                # Cancel market data subscription
                 self.cancelMktData(req_id)
                 return mid_price
-            # If no bid/ask, try to use last price
+            
             elif data.get('last') is not None:
                 self.cancelMktData(req_id)
                 return data['last']
+            
+            else:
+                logging.error(f"IBKR API: No valid price data for contract {contract.symbol}")
                 
         # Cancel market data subscription if we haven't already
         self.cancelMktData(req_id)

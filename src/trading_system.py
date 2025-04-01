@@ -135,11 +135,11 @@ class TradingSystem:
 
             # Check if it's near end of trading day (3:59 PM or later)
             now = pd.Timestamp.now(tz=self.config.timezone)
-            if self.risk_manager.perform_eod_checks(
+            self.risk_manager.perform_eod_close(
                 now, 
-                self.config.eod_exit_time, 
-                self.portfolio_manager):
-                loop_sleep_time = 15
+                self.config.eod_exit_time,
+                self.config.trading_end_time,
+                self.portfolio_manager)
 
             self._save_market_data()
 

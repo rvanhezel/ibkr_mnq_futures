@@ -1,3 +1,4 @@
+import time
 from src.portfolio.portfolio_manager import PortfolioManager
 import datetime
 import pytz
@@ -104,7 +105,11 @@ class RiskManager:
         logging.debug(f"Loaded trading pause: {latest_pause['start_time']} to {latest_pause['end_time']}")
         return
     
-    def perform_eod_checks(self, now: pd.Timestamp, eod_exit_time: str, ptf_manager: PortfolioManager):
+    def perform_eod_close(self, 
+                           now: pd.Timestamp, 
+                           eod_exit_time: str, 
+                           market_close_time: str,
+                           ptf_manager: PortfolioManager):
         """Perform end of day checks"""
         eod_cutoff = pd.Timestamp(
                 now.year, 
@@ -114,11 +119,23 @@ class RiskManager:
                 int(eod_exit_time[2:]),           
                 tz=self.timezone)
         
-        if now >= eod_cutoff:
+        market_close_time = pd.Timestamp(
+                now.year, 
+                now.month, 
+                now.day, 
+                int(market_close_time[:2]),           
+                int(market_close_time[2:]),           
+                tz=self.timezone)
+
+        if market_close_time >= now >= eod_cutoff:
             logging.info(f"Current time: {now} - End of day approaching - closing all positions and cancelling orders")
             
             ptf_manager.cancel_all_orders()
             ptf_manager.close_all_positions()
+
+            seconds_until_close = (market_close_time - now).total_seconds()
+            logging.info(f"Sleeping for {seconds_until_close} seconds until market close")
+            time.sleep(seconds_until_close)
             return True
         
         return False

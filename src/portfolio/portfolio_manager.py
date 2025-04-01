@@ -202,10 +202,10 @@ class PortfolioManager:
 
         return pnl
 
-    def place_bracket_order(self):
+    def place_bracket_order(self, contract: Contract = None):
         """Place a bracket order"""
         logging.debug("Placing bracket order.")
-        contract = self.get_current_contract()
+        contract = self.get_current_contract() if contract is None else contract
 
         mid_price = self.api.get_latest_mid_price(contract)
 
@@ -284,12 +284,12 @@ class PortfolioManager:
                     order.orderType == 'MKT' and
                     order_status == "Cancelled"):
 
-                    logging.warning(f"Order type: {order.order_type}, id:{order.order_id}, was cancelled.")
+                    logging.warning(f"Order type: {order.orderType}, id:{order.orderId}, was cancelled.")
                     found_cancelled_order = True
 
                     if self.config.resubmit_cancelled_order:
 
-                        logging.info(f"Resubmitting order type: {order.order_type}, id:{order.order_id}.")
+                        logging.info(f"Resubmitting order type: {order.orderType}, id:{order.orderId}.")
                         already_resubmitted = True
 
                         order_details = self.api.get_open_order(order.orderId)
@@ -297,7 +297,7 @@ class PortfolioManager:
                         self.place_bracket_order(order_details['contract'])
 
                     else:
-                        logging.info(f"Not resubmitting cancelled order type: {order.order_type}, id:{order.order_id}.")
+                        logging.info(f"Not resubmitting cancelled order type: {order.orderType}, id:{order.orderId}.")
 
         if not found_cancelled_order:
             logging.debug("No cancelled orders found.")
@@ -382,7 +382,15 @@ class PortfolioManager:
             # Place the order
             order_id, _ = self.api.place_market_order(contract, "SELL", position.quantity)
             order_details = self.api.get_open_order(order_id)
-            self.orders.append((order_details['order'], False))
+            self.orders.append([(order_details['order'], False)])
+
+            self.db.add_order(order_details['order'])
+
+            order_id = order_details['order'].orderId
+            self.db.add_order_status(order_id, self._get_order_status(order_id))
+
+            self.update_positions()
+            self.db.print_all_entries()
 
         elif position.quantity == 0:
             msg = f"Position {position.ticker} with quantity {position.quantity}. No positions to close"
@@ -399,6 +407,7 @@ class PortfolioManager:
         """Clear all orders and positions. This is called when the trading day
         has ended and we need to clear the orders and positions for the next day.
         """
+        logging.debug("Clearing orders, order statuses and positions.")
         self.orders = []
         self.positions = []
         self.order_statuses = {}
