@@ -442,6 +442,24 @@ class Database:
                 else:
                     print("No trading pauses found")
 
+                # Print Order Statuses
+                print("\n=== ORDER STATUSES ===")
+                cursor.execute("PRAGMA table_info(order_status)")
+                status_columns = [col[1] for col in cursor.fetchall()]
+                cursor.execute('SELECT * FROM order_status')
+                statuses = cursor.fetchall()
+                if statuses:
+                    # Create header with column names
+                    header = " | ".join(f"{col:<12}" for col in status_columns)
+                    print(header)
+                    print("-" * len(header))
+                    # Print data rows
+                    for status in statuses:
+                        row = " | ".join(f"{str(val):<12}" for val in status)
+                        print(row)
+                else:
+                    print("No order statuses found")
+
                 return True
         except Exception as e:
             logging.error(f"DB: Error printing database entries: {str(e)}")
@@ -458,7 +476,7 @@ class Database:
                 order_ids = [row[0] for row in cursor.fetchall()]
                 
                 # Get all position IDs
-                cursor.execute('SELECT id FROM positions ORDER BY created_timestamp DESC')
+                cursor.execute('SELECT id FROM positions ORDER BY created_timestamp ASC')
                 position_ids = [row[0] for row in cursor.fetchall()]
                 
                 # Get orders and positions using existing methods
@@ -489,9 +507,9 @@ class Database:
                 rows = cursor.fetchall()
                 if rows:
                     return [{
-                        'start_time': pd.Timestamp(row[0]).tz_localize(self.timezone),
-                        'end_time': pd.Timestamp(row[1]).tz_localize(self.timezone),
-                        'created_timestamp': pd.Timestamp(row[2]).tz_localize(self.timezone)
+                        'start_time': pd.Timestamp(row[0]).tz_convert(self.timezone),
+                        'end_time': pd.Timestamp(row[1]).tz_convert(self.timezone),
+                        'created_timestamp': pd.Timestamp(row[2]).tz_convert(self.timezone)
                     } for row in rows]
                 return []
         except Exception as e:
@@ -566,8 +584,8 @@ class Database:
                     WHERE order_id = ?
                 ''', (
                     status_dict['status'],
-                    status_dict['filled'],
-                    status_dict['remaining'],
+                    int(status_dict['filled']),
+                    int(status_dict['remaining']),
                     status_dict['avg_fill_price'],
                     status_dict['last_fill_price'],
                     status_dict['parent_id'],
@@ -580,7 +598,7 @@ class Database:
                 ))
                 
                 conn.commit()
-                logging.info(f"Updated status for order {order_id}")
+                logging.info(f"DB: Updated status for order {order_id}")
                 return True
         except Exception as e:
             logging.error(f"DB: Error updating order status: {str(e)}")

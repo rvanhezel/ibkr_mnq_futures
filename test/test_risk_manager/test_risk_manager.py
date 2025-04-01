@@ -2,6 +2,10 @@ import pytest
 import pandas as pd
 import pytz
 from src.risk_manager import RiskManager
+import os
+from src.db.database import Database
+from unittest.mock import patch
+from src.portfolio.portfolio_manager import PortfolioManager
 
 
 class TestRiskManager:
@@ -99,4 +103,47 @@ class TestRiskManager:
         
         # Test during overnight trading (6:00 AM ET)
         overnight_time = pd.Timestamp("2025-03-17 06:00", tz=et_tz)  # Monday 6:00 AM ET
-        assert risk_manager.is_trading_hours(overnight_time) == True 
+        assert risk_manager.is_trading_hours(overnight_time) == True
+
+    def test_should_pause_trading(self, risk_manager: RiskManager):
+        """Test should_pause_trading function with various PnL values"""
+        assert risk_manager.should_pause_trading(100, 2) == False
+        assert risk_manager.should_pause_trading(-100, 2) == False
+        assert risk_manager.should_pause_trading(-360, 2) == False
+        assert risk_manager.should_pause_trading(-720, 2) == True
+        assert risk_manager.should_pause_trading(-900, 2) == True
+
+    def test_can_resume_trading_after_pause(self, risk_manager: RiskManager):
+        db = Database(risk_manager.timezone, 
+                      os.path.join(os.getcwd(), 
+                                   "test", 
+                                   "test_risk_manager", 
+                                   "test_trading.db"))
+        risk_manager.populate_from_db(db)
+        
+        assert risk_manager.can_resume_trading_after_pause(pd.Timestamp("2025-04-01 15:00", tz=risk_manager.timezone)) == False
+        assert risk_manager.can_resume_trading_after_pause(pd.Timestamp("2025-04-02 15:00", tz=risk_manager.timezone)) == True #this call resets the times
+        assert risk_manager.can_resume_trading_after_pause(pd.Timestamp("2025-04-01 15:00", tz=risk_manager.timezone)) == True         
+
+    def test_perform_eod_checks(self, risk_manager: RiskManager):
+        """Test perform_eod_checks function with various times"""
+        et_tz = risk_manager.timezone
+
+        with patch('src.portfolio.portfolio_manager.PortfolioManager.cancel_all_orders', 
+                  return_value=True), \
+            patch('src.portfolio.portfolio_manager.PortfolioManager.close_all_positions', 
+                  return_value=True):
+            
+            now = pd.Timestamp("2025-03-18 13:00", tz=et_tz)
+            edge_case = pd.Timestamp("2025-03-18 15:59", tz=et_tz)
+            later = pd.Timestamp("2025-03-18 15:59:30", tz=et_tz)
+            eod_exit_time = "1559"
+            ptf_manager = PortfolioManager(None, None, None)
+
+            assert risk_manager.perform_eod_checks(now, eod_exit_time, ptf_manager) == False
+            assert risk_manager.perform_eod_checks(edge_case, eod_exit_time, ptf_manager) == True
+            assert risk_manager.perform_eod_checks(later, eod_exit_time, ptf_manager) == True
+    
+
+        
+

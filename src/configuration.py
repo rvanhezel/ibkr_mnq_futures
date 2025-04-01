@@ -30,6 +30,7 @@ class Configuration:
         self.timezone = self.config.get('Trading', 'timezone')
         self.roll_contract_days_before = self.config.getint('Trading', 'roll_contract_days_before')
         self.resubmit_cancelled_order = self.config.getboolean('Trading', 'resubmit_cancelled_order')
+        self.strategy = self.config.get('Trading', 'strategy')
 
         # Risk Management section
         self.stop_loss_ticks = self.config.getfloat('Risk_Management', 'stop_loss_ticks')

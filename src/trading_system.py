@@ -55,7 +55,7 @@ class TradingSystem:
                 logging.info("Live trading mode enabled")
 
             self.api.connect()
-            self.portfolio_manager.populate_from_db()
+            self.portfolio_manager.populate_from_db() 
             self.risk_manager.populate_from_db(self.db)
 
             while True:
@@ -93,7 +93,7 @@ class TradingSystem:
 
             now = pd.Timestamp.now(tz=self.config.timezone)
             if now.date() > previous_day:
-                Logger(now.date()) # Create new log file for new day to avoid excessively large log files
+                Logger(now.date()) # Create new log file for new day to avoid excessively large files
                 previous_day = now.date()
 
             if not self.risk_manager.is_trading_day(now):
@@ -108,7 +108,7 @@ class TradingSystem:
                 continue
             
             if not self.risk_manager.can_resume_trading_after_pause(now):
-                logging.warning("Trading paused triggered. Waiting...")
+                logging.warning(f"Trading paused triggered until {self.risk_manager.pause_end_time}. Waiting...")
                 time.sleep(60)
                 continue
 
@@ -123,7 +123,7 @@ class TradingSystem:
             pnl = self.portfolio_manager.daily_pnl()
             logging.debug(f"PnL: {pnl}")
 
-            if self.risk_manager.should_pause_trading(pnl):
+            if self.risk_manager.should_pause_trading(pnl, self.config.number_of_contracts):
                 logging.warning(f"PnL: {pnl} is below max 24h loss. Pausing trading.")
                 self.risk_manager.set_trading_pause_time(self.db)
 
@@ -134,6 +134,7 @@ class TradingSystem:
             self._check_trading_opportunities()
 
             # Check if it's near end of trading day (3:59 PM or later)
+            now = pd.Timestamp.now(tz=self.config.timezone)
             if self.risk_manager.perform_eod_checks(
                 now, 
                 self.config.eod_exit_time, 
@@ -167,8 +168,12 @@ class TradingSystem:
             self.market_data = self.market_data[~self.market_data.index.duplicated(keep='last')]
             self.market_data.sort_index(inplace=True)
             
-        signal = self.strategy.generate_signals(self.market_data, self.config)
-        signal = Signal.BUY #for testing
+        if self.config.strategy == 'bollinger_rsi':
+            signal = self.strategy.generate_signals(self.market_data, self.config)
+        elif self.config.strategy == 'buy':
+            signal = Signal.BUY #for testing
+        else:
+            raise ValueError(f"Invalid strategy: {self.config.strategy}")
 
         logging.info(f"Market data tail: {self.market_data.tail(10)}")
         logging.info(f"Signal generated: {signal.name}")

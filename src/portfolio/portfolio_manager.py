@@ -84,6 +84,8 @@ class PortfolioManager:
                             self.positions.append(position)
                             self.db.add_position(position)
 
+                            self.db.update_order_status(order.orderId, order_status)
+
                             self.orders[bracket_idx][order_idx] = (order, True)
 
                         else:
@@ -104,6 +106,8 @@ class PortfolioManager:
                             self.positions.append(position)
                             self.db.add_position(position)
 
+                            self.db.update_order_status(order.orderId, order_status)
+
                     elif order.orderType == 'MKT' and order.action == 'SELL':
 
                         logging.info(f"Market sell order filled, updating position.")
@@ -122,6 +126,8 @@ class PortfolioManager:
 
                         self.positions.append(position)
                         self.db.add_position(position)
+
+                        self.db.update_order_status(order.orderId, order_status)
                     
                     elif order.orderType == 'STP' or order.orderType == 'LMT' and order.action == 'SELL':
 
@@ -142,6 +148,8 @@ class PortfolioManager:
                         self.positions.append(position)
                         self.db.add_position(position)
 
+                        self.db.update_order_status(order.orderId, order_status)
+
                     else:
 
                         raise TypeError(f"Order type {order.orderType} with action {order.action} is not supported.")
@@ -159,9 +167,8 @@ class PortfolioManager:
         pnl = 0
 
         for bracket_order in self.orders:
-            # a backet order only hits pnl if 2 out of 3 orders are filled
-            # so we need to check the status of each order
-            # and then sum the pnl of the filled orders
+            # a backet order only hits realized pnl if 2 out of 3 orders are filled
+            # We need to check the status of each order and then sum the pnl of the filled orders
 
             filled_count = 0
             current_order_pnl = 0
@@ -443,7 +450,14 @@ class PortfolioManager:
             else:
                 filled_flags.append(False)
 
-        self.orders = [list(zip(loaded_orders, filled_flags))]
+        # Group orders into brackets of 3 orders each
+        bracket_orders = []
+        for i in range(0, len(loaded_orders), 3):
+            bracket = loaded_orders[i:i+3]
+            bracket_filled_flags = filled_flags[i:i+3]
+            bracket_orders.append(list(zip(bracket, bracket_filled_flags)))
+
+        self.orders = bracket_orders
 
         logging.info("PortfolioManager: Populating positions from database.")
         logging.debug(f"PortfolioManager: Raw positions found: {len(raw_positions)}")

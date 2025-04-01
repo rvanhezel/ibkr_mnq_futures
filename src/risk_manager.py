@@ -31,9 +31,9 @@ class RiskManager:
         self.pause_start_time = None
         self.pause_end_time = None
     
-    def should_pause_trading(self, pnl):
+    def should_pause_trading(self, pnl, num_contracts):
         """Check if trading should be paused based on daily PnL"""
-        if pnl <= -self.max_24h_loss:
+        if pnl <= -self.max_24h_loss * num_contracts:
             return True
         return False
     
@@ -86,14 +86,6 @@ class RiskManager:
             
         else:
             return False
-
-    def calculate_stop_loss_price(self, entry_price):
-        """Calculate stop loss price based on ticks"""
-        return entry_price - (self.stop_loss_ticks * self.mnq_tick_size)
-
-    def calculate_take_profit_price(self, entry_price):
-        """Calculate take profit price based on ticks"""
-        return entry_price + (self.take_profit_ticks * self.mnq_tick_size)
 
     def populate_from_db(self, db: Database):
         """Load trading pauses from database and simply set the pause times

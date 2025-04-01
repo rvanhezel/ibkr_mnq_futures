@@ -1,8 +1,3 @@
-from ibapi.client import EClient, Order
-from ibapi.wrapper import EWrapper
-from ibapi.contract import Contract
-
-from src.api.ibkr_api import IBConnection
 from src.utilities.logger import Logger
 from src.configuration import Configuration
 
