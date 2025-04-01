@@ -4,7 +4,7 @@ import pandas as pd
 import os
 from src.db.database import Database
 import logging
-from src.utilities.utils import trading_day_start_time
+from src.utilities.utils import trading_day_start_time_ts
 
 
 class RiskManager:

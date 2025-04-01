@@ -1,3 +1,4 @@
+from src.portfolio.position import Position
 import datetime
 import threading
 import time
@@ -625,4 +626,25 @@ class IBConnection(EWrapper, EClient):
             'count': count
         })
 
+    def get_matching_position(self, position: Position):
+            contract = Contract()
+            contract.symbol = position.ticker
+            contract.secType = position.security
+            contract.currency = position.currency
+            contract.lastTradeDateOrContractMonth = position.expiry
 
+            # Check that the position actually still exists in IBKR
+            positions = self.get_positions()
+        
+            matching_position = None
+            for native_position in positions:
+
+                native_contract = native_position['contract']
+
+                if (contract.symbol == native_contract.symbol and 
+                    contract.secType == native_contract.secType and
+                    contract.currency == native_contract.currency and
+                    contract.lastTradeDateOrContractMonth == native_contract.lastTradeDateOrContractMonth):
+                    matching_position = native_position
+
+            return matching_position

@@ -48,7 +48,7 @@ class Configuration:
         self.api = self.config.get('API', 'API')
         self.ib_host = self.config.get('API', 'ib_host')
         self.ib_client_id = self.config.getint('API', 'ib_client_id')
-        self.paper_trading = self.config.getboolean('API', 'paper_trading')
+        self.paper_trading = self._check_paper_trading(self.config.getboolean('API', 'paper_trading'))
         self.ib_port = self._set_ib_port()
         self.timeout = self.config.getint('API', 'timeout')
 
@@ -82,3 +82,9 @@ class Configuration:
         if contract_number != 2 :
             raise ValueError("Contract number must be 2")
         return contract_number
+    
+    def _check_paper_trading(self, paper_trading: bool):
+        if paper_trading:
+            return True
+        else:
+            raise ValueError("Paper trading must be enabled for testing")

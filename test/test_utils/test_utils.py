@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from src.utilities.utils import trading_day_start_time
+from src.utilities.utils import trading_day_start_time_ts
 
 
 
@@ -20,7 +20,7 @@ class TestUtils:
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr('pandas.Timestamp.now', lambda tz=None: now_test_date)
 
-            result = trading_day_start_time(start_time, self.timezone)
+            result = trading_day_start_time_ts(start_time, self.timezone)
 
         assert result == expected_time
 
@@ -33,7 +33,7 @@ class TestUtils:
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr('pandas.Timestamp.now', lambda tz=None: now_test_date)
 
-            result = trading_day_start_time(start_time, self.timezone)
+            result = trading_day_start_time_ts(start_time, self.timezone)
         assert result == expected_time
 
     def test_trading_day_start_time_edge_case(self):

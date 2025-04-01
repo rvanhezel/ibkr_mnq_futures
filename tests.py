@@ -20,7 +20,7 @@ if __name__ == "__main__":
     Logger()
     cfg = Configuration('run.cfg')
 
-    api = IBConnection(cfg.ib_host, cfg.ib_port, cfg.ib_client_id, cfg.timeout)
+    api = IBConnection(cfg.ib_host, cfg.ib_port, cfg.ib_client_id, cfg.timeout, cfg.timezone)
     api.connect()
 
     # contract = api.get_current_contract(cfg.ticker, cfg.exchange, cfg.currency)
@@ -52,6 +52,18 @@ if __name__ == "__main__":
     contract.exchange = "SMART"            
     contract.currency = "USD"
     contract.lastTradeDateOrContractMonth = "202506"
+
+    positions = api.get_positions()
+    
+    mnq_contracts = []
+    for contract_obj in positions:
+        position_number = int(contract_obj['position'])
+        contract = contract_obj['contract']
+        if contract.symbol == 'MNQ' and contract.secType == 'FUT':
+            mnq_contracts.append((contract, position_number))
+
+    print(f"We have {len(mnq_contracts)} MNQ contracts")
+    print(f"MNQ Contracts: {mnq_contracts}")
     
     data = api.get_historical_data(contract, "1 D", "1 min")
 

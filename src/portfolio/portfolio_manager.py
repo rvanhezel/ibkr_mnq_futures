@@ -1,3 +1,4 @@
+import copy
 from src.portfolio.position import Position
 import pandas as pd
 from typing import List, Dict, Optional
@@ -12,7 +13,7 @@ import logging
 import time
 from src.db.database import Database
 from src.api.api_utils import get_current_contract, order_from_dict
-from src.utilities.utils import trading_day_start_time
+from src.utilities.utils import trading_day_start_time_ts
 
 
 class PortfolioManager:
@@ -88,7 +89,7 @@ class PortfolioManager:
                         else:
                             logging.info(f"Buy order filled, updating position.")
 
-                            position = self.positions[0]
+                            position = copy.deepcopy(self.positions[-1])
 
                             total_quantity = position.quantity + int(order.totalQuantity)
                             avg_price = position.quantity * position.avg_price
@@ -100,13 +101,14 @@ class PortfolioManager:
 
                             self.orders[bracket_idx][order_idx] = (order, True)
                             
-                            self.db.add_position(position) #create a new entry in the db as opposed to updating the existing one
+                            self.positions.append(position)
+                            self.db.add_position(position)
 
                     elif order.orderType == 'MKT' and order.action == 'SELL':
 
                         logging.info(f"Market sell order filled, updating position.")
 
-                        position = self.positions[0]
+                        position = copy.deepcopy(self.positions[-1])
 
                         total_quantity = position.quantity - int(order.totalQuantity)
                         avg_price = position.quantity * position.avg_price
@@ -118,13 +120,14 @@ class PortfolioManager:
                         
                         self.orders[bracket_idx][order_idx] = (order, True)
 
-                        self.db.add_position(position) 
-
+                        self.positions.append(position)
+                        self.db.add_position(position)
+                    
                     elif order.orderType == 'STP' or order.orderType == 'LMT' and order.action == 'SELL':
 
                         logging.info(f"{order.orderType} order filled, updating position.")
 
-                        position = self.positions[0]
+                        position = copy.deepcopy(self.positions[-1])
 
                         total_quantity = position.quantity - int(order.totalQuantity)
                         avg_price = position.quantity * position.avg_price
@@ -136,6 +139,7 @@ class PortfolioManager:
 
                         self.orders[bracket_idx][order_idx] = (order, True)
 
+                        self.positions.append(position)
                         self.db.add_position(position)
 
                     else:
@@ -254,8 +258,8 @@ class PortfolioManager:
                 
         return False
 
-    def contract_count_from_open_positions(self):
-        return sum(position.quantity for position in self.positions)
+    def current_position_quantity(self):
+        return self.positions[-1].quantity if len(self.positions) > 0 else 0
 
     def check_cancelled_market_order(self):
         """Check for cancelled market orders and resubmit them if required."""
@@ -372,61 +376,64 @@ class PortfolioManager:
                 if order_status['status'] not in ['Filled', 'Cancelled']:
                     logging.info(f"Cancelling order {order.orderId} of type {order.orderType}")
                     self.api.cancel_order(order.orderId)
-                
-        # # Wait a moment for orders to be cancelled
-        # time.sleep(3)
-        
-        # # Update order statuses
-        # filled_count, cancelled_count, pending_count = self._get_order_status_count()
-        # msg = f"Order status after cancellation: {filled_count} filled,"
-        # msg += f" {cancelled_count} cancelled, {pending_count} pending"
-        # logging.info(msg)
 
     def close_all_positions(self):
         """Close all open positions by issuing market sell orders."""
         logging.info("Closing all open positions.")
-        
-        for position in self.positions:
-            if position.quantity > 0:
-                logging.info(f"Closing position for {position.ticker} with quantity {position.quantity}")
-                
-                contract = Contract()
-                contract.symbol = position.ticker
-                contract.secType = position.security
-                contract.exchange = self.config.exchange
-                contract.currency = position.currency
-                contract.lastTradeDateOrContractMonth = position.expiry
-                
-                # Place the order
-                order_id, _ = self.api.place_market_order(contract, "SELL", position.quantity)
-                order_details = self.api.get_open_order(order_id)
-                self.orders.append((order_details['order'], False))
 
-            else:
-                msg = f"Unsupported position type: {position.ticker} with quantity {position.quantity}."
-                msg += " Cannot close."
+        if len(self.positions) == 0:
+            logging.info("No positions to close.")
+            return
+        
+        # The last position entry is the current position
+        position = self.positions[-1]
+
+        if position.quantity > 0:
+            logging.info(f"Closing position for {position.ticker} with quantity {position.quantity}")
+            matching_position = self.api.get_matching_position(position)
+
+            if matching_position is None:
+                msg = f"Position {position.ticker} with quantity {position.quantity} not found in IBKR. Cannot close."
                 logging.error(msg)
-                raise AttributeError(msg)
-                
-        # # Wait a moment for orders to be processed
-        # time.sleep(1)
-        
-        # # Update positions
-        # self.update_positions()
-        
-        # # Log final position status
-        # remaining_positions = sum(1 for position in self.positions if position.quantity > 0)
-        # logging.info(f"Remaining open positions after closing: {remaining_positions}")
+                return
+
+            native_contract_quantity = int(matching_position['position'])
+            if position.quantity > native_contract_quantity:
+                msg = f"Trying to close position {position.ticker} with quantity {position.quantity}."
+                msg += f" Only {native_contract_quantity} contracts are found on IBKR. Cannot close local position."
+                logging.error(msg)
+                return
+            
+            contract = Contract()
+            contract.symbol = position.ticker
+            contract.secType = position.security
+            contract.currency = position.currency
+            contract.exchange = self.config.exchange
+            contract.lastTradeDateOrContractMonth = position.expiry
+
+            # Place the order
+            order_id, _ = self.api.place_market_order(contract, "SELL", position.quantity)
+            order_details = self.api.get_open_order(order_id)
+            self.orders.append((order_details['order'], False))
+
+        elif position.quantity == 0:
+            msg = f"Position {position.ticker} with quantity {position.quantity}. No positions to close"
+            logging.info(msg)
+        else:
+            msg = f"Trying to close position {position.ticker} with quantity {position.quantity}. None handled scenario."
+            logging.error(msg)
+            raise NotImplementedError(msg)
     
     def _total_orders(self):
         return sum(len(bracket_order) for bracket_order in self.orders)
     
-    def clear_orders_and_positions(self):
+    def clear_orders_statuses_positions(self):
         """Clear all orders and positions. This is called when the trading day
         has ended and we need to clear the orders and positions for the next day.
         """
         self.orders = []
         self.positions = []
+        self.order_statuses = {}
 
     def populate_from_db(self):
         """Populate the orders from the database. Only orders created after the 
@@ -435,12 +442,13 @@ class PortfolioManager:
         again and dont have to load the positions from the database.
         """
         logging.info("PortfolioManager: Populating orders from database.")
+        self.db.print_all_entries()
 
         raw_orders_and_positions = self.db.get_all_orders_and_positions()
         raw_orders = raw_orders_and_positions['orders']
         raw_positions = raw_orders_and_positions['positions']
 
-        trading_day_start = trading_day_start_time(self.config.trading_start_time, self.config.timezone)
+        trading_day_start = trading_day_start_time_ts(self.config.trading_start_time, self.config.timezone)
 
         logging.debug(f"PortfolioManager: Raw orders found: {len(raw_orders_and_positions['orders'])}")
         loaded_orders = []
@@ -486,4 +494,35 @@ class PortfolioManager:
                 self.positions.append(Position.from_dict(position))
 
         logging.debug(f"Loaded {len(self.positions)} positions from database.")
+
+        # Check that the latest position from the DB actually still exists in IBKR
+        if len(self.positions) > 0:
+            latest_db_position = self.positions[-1]
+            matching_position = self.api.get_matching_position(latest_db_position)
+
+            if matching_position is None:
+                msg = f"Inconsistent DB state: Position {latest_db_position.ticker} with quantity {latest_db_position.quantity}"
+                msg += f" from DB not found in IBKR. Reinitializing database and portfolio state."
+                logging.error(msg)
+
+                self.cancel_all_orders()
+                self.clear_orders_statuses_positions()
+                self.db.reinitialize()
+                self.db.print_all_entries()
+
+
+            elif latest_db_position.quantity > int(matching_position['position']):
+                msg = f"Inconsistent DB state: Position {latest_db_position.ticker} has {latest_db_position.quantity} contracts."
+                msg += f" Only {int(matching_position['position'])} contracts are found on IBKR."
+                msg += f" Reinitializing database and portfolio state."
+                logging.error(msg)
+                
+                self.cancel_all_orders()
+                self.clear_orders_statuses_positions()
+                self.db.reinitialize()
+                self.db.print_all_entries()
+            else:
+                logging.info("DB state consistent with IBKR.")
+
+
 

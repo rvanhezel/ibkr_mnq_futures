@@ -99,12 +99,12 @@ def shift_date_by_period(period: Period, input_date: pd.Timestamp, direction: st
 
     return input_date
 
-def trading_day_start_time(start_time: str, timezone: str) -> pd.Timestamp:
+def trading_day_start_time_ts(start_time: str, timezone: str, day_offset: int = -1) -> pd.Timestamp:
     hours = int(start_time[:2])
     minutes = int(start_time[2:])
     
     now = pd.Timestamp.now(tz=timezone)
-    today_start = pd.Timestamp(
+    start = pd.Timestamp(
         year=now.year,
         month=now.month,
         day=now.day,
@@ -112,11 +112,8 @@ def trading_day_start_time(start_time: str, timezone: str) -> pd.Timestamp:
         minute=minutes,
         tz=timezone
     )
-    
-    if today_start < now:
-        return today_start
-    else:
-        return today_start - pd.Timedelta(days=1)
+
+    return start + pd.Timedelta(days=day_offset)
 
 def get_local_timezone() -> str:
         local_tz = datetime.datetime.now().astimezone().tzinfo.tzname(None)
@@ -139,6 +136,11 @@ def get_local_timezone() -> str:
                 'EET': 'Europe/Istanbul',
                 'CET': 'Europe/Paris',
                 'W. Europe Daylight Time': 'Europe/Amsterdam',
+                'W. Europe Standard Time': 'Europe/Amsterdam',
+                'Central Standard Time': 'US/Central',
+                'Central Daylight Time': 'US/Central',
+                'Eastern Standard Time': 'US/Eastern',
+                'Eastern Daylight Time': 'US/Eastern',
                 'WET': 'Europe/London',
                 'GMT': 'UTC',
                 'UTC': 'UTC'

@@ -4,6 +4,7 @@ import logging
 import pandas as pd
 from typing import Union
 from ibapi.order import Order
+import time
 
 
 class Database:
@@ -16,6 +17,53 @@ class Database:
             self._init_db()
         else:
             logging.info(f"Using existing database at {self.db_path}")
+
+    def reinitialize(self):
+        """Delete the existing database file and reinitialize it.
+        
+        This function will:
+        1. Close any existing connections
+        2. Delete the database file if it exists
+        3. Create a new database with fresh tables
+        
+        Returns:
+            bool: True if reinitialization was successful, False otherwise
+        """
+        try:
+            # Force close any existing connections
+            try:
+                with sqlite3.connect(self.db_path) as conn:
+                    conn.execute("PRAGMA optimize")
+                    conn.close()
+            except:
+                pass
+            
+            if os.path.exists(self.db_path):
+                max_attempts = 3
+
+                for attempt in range(max_attempts):
+                    time.sleep(2)
+
+                    try:
+                        os.remove(self.db_path)
+                        logging.info(f"Deleted existing database at {self.db_path}")
+                        break
+                    except PermissionError:
+                        if attempt < max_attempts - 1:
+                            time.sleep(0.1)  # Wait 100ms before retrying
+                        else:
+                            raise
+            
+            # Initialize new database
+            self._init_db()
+            logging.info("Database reinitialized successfully")
+            return True
+            
+        except Exception as e:
+            msg = f"Error reinitializing database: {str(e)}"
+            msg += f". Please manually delete the database file and restart the program."
+            logging.error(msg)
+            raise Exception(msg)
 
     def _init_db(self):  
         """Initialize the database and create tables if they don't exist"""
@@ -41,7 +89,8 @@ class Database:
                 # Create positions table
                 cursor.execute('''
                     CREATE TABLE IF NOT EXISTS positions (
-                        contract_id INTEGER PRIMARY KEY,
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        contract_id INTEGER NOT NULL,
                         ticker TEXT NOT NULL,
                         security TEXT NOT NULL,
                         currency TEXT NOT NULL,
@@ -171,13 +220,39 @@ class Database:
                     current_time.isoformat()
                 ))
                 conn.commit()
-                logging.info(f"Added position {position.contract_id} to database")
-                return True
+                position_id = cursor.lastrowid
+                logging.info(f"Added position {position_id} to database")
+                return position_id
         except Exception as e:
             logging.error(f"DB: Error adding position to database: {str(e)}")
-            return False
+            return None
 
-    def get_position(self, contract_id: int):
+    def get_position(self, position_id: int):
+        """Get a position from the database by position ID"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT * FROM positions WHERE id = ?', (position_id,))
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        'id': row[0],
+                        'contract_id': row[1],
+                        'ticker': row[2],
+                        'security': row[3],
+                        'currency': row[4],
+                        'expiry': row[5],
+                        'quantity': row[6],
+                        'avg_price': row[7],
+                        'time_opened': pd.Timestamp(row[8]),
+                        'created_timestamp': pd.Timestamp(row[9])
+                    }
+                return None
+        except Exception as e:
+            logging.error(f"DB: Error getting position from database: {str(e)}")
+            return None
+
+    def get_position_by_contract_id(self, contract_id: int):
         """Get a position from the database by contract ID"""
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -186,20 +261,55 @@ class Database:
                 row = cursor.fetchone()
                 if row:
                     return {
-                        'contract_id': row[0],
-                        'ticker': row[1],
-                        'security': row[2],
-                        'currency': row[3],
-                        'expiry': row[4],
-                        'quantity': row[5],
-                        'avg_price': row[6],
-                        'time_opened': pd.Timestamp(row[7]),
-                        'created_timestamp': pd.Timestamp(row[8])
+                        'id': row[0],
+                        'contract_id': row[1],
+                        'ticker': row[2],
+                        'security': row[3],
+                        'currency': row[4],
+                        'expiry': row[5],
+                        'quantity': row[6],
+                        'avg_price': row[7],
+                        'time_opened': pd.Timestamp(row[8]),
+                        'created_timestamp': pd.Timestamp(row[9])
                     }
                 return None
         except Exception as e:
             logging.error(f"DB: Error getting position from database: {str(e)}")
             return None
+
+    def update_position(self, position):
+        """Update an existing position in the database"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE positions SET
+                        contract_id = ?,
+                        ticker = ?,
+                        security = ?,
+                        currency = ?,
+                        expiry = ?,
+                        quantity = ?,
+                        avg_price = ?,
+                        time_opened = ?
+                    WHERE id = ?
+                ''', (
+                    position.contract_id,
+                    position.ticker,
+                    position.security,
+                    position.currency,
+                    position.expiry,
+                    position.quantity,
+                    position.avg_price,
+                    position.time_opened.isoformat(),
+                    position.id
+                ))
+                conn.commit()
+                logging.info(f"DB: Updated position {position.id}")
+                return True
+        except Exception as e:
+            logging.error(f"DB: Error updating position in database: {str(e)}")
+            return False
 
     def add_trading_pause(self, start_time: pd.Timestamp, end_time: pd.Timestamp):
         """Add a trading pause period to the database"""
@@ -270,38 +380,6 @@ class Database:
                 return True
         except Exception as e:
             logging.error(f"DB: Error updating order in database: {str(e)}")
-            return False
-
-    def update_position(self, position):
-        """Update an existing position in the database"""
-        try:
-            with sqlite3.connect(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    UPDATE positions SET
-                        ticker = ?,
-                        security = ?,
-                        currency = ?,
-                        expiry = ?,
-                        quantity = ?,
-                        avg_price = ?,
-                        time_opened = ?
-                    WHERE contract_id = ?
-                ''', (
-                    position.ticker,
-                    position.security,
-                    position.currency,
-                    position.expiry,
-                    position.quantity,
-                    position.avg_price,
-                    position.time_opened.isoformat(),
-                    position.contract_id
-                ))
-                conn.commit()
-                logging.info(f"DB: Updated position {position.contract_id}")
-                return True
-        except Exception as e:
-            logging.error(f"DB: Error updating position in database: {str(e)}")
             return False
 
     def print_all_entries(self):
@@ -379,13 +457,13 @@ class Database:
                 cursor.execute('SELECT order_id FROM orders ORDER BY created_timestamp DESC')
                 order_ids = [row[0] for row in cursor.fetchall()]
                 
-                # Get all position contract IDs
-                cursor.execute('SELECT contract_id FROM positions ORDER BY created_timestamp DESC')
+                # Get all position IDs
+                cursor.execute('SELECT id FROM positions ORDER BY created_timestamp DESC')
                 position_ids = [row[0] for row in cursor.fetchall()]
                 
                 # Get orders and positions using existing methods
                 orders = [self.get_order(order_id) for order_id in order_ids]
-                positions = [self.get_position(contract_id) for contract_id in position_ids]
+                positions = [self.get_position(position_id) for position_id in position_ids]
                 
                 return {
                     'orders': orders,
