@@ -1,8 +1,6 @@
 from src.utilities.logger import Logger
 import time
-import copy
 from datetime import datetime
-import pytz
 from src.risk_manager import RiskManager
 import logging
 from src.api.ibkr_api import IBConnection

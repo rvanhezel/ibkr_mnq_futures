@@ -127,38 +127,6 @@ class IBConnection(EWrapper, EClient):
         """Callback for contract details"""
         self.contract_details[reqId] = contractDetails
 
-    # def should_rollover(self, days_before_expiry):
-    #     """Check if it's time to roll over to the next contract"""
-    #     if not self.current_contract:
-    #         return True
-
-    #     req_id = self.get_next_req_id()
-    #     self.contract_details.clear()
-    #     self.reqContractDetails(req_id, self.current_contract)
-
-    #     # Wait for contract details
-    #     timeout = self.timeout
-    #     while req_id not in self.contract_details and timeout > 0:
-    #         time.sleep(0.1)
-    #         timeout -= 0.1
-
-    #     if req_id not in self.contract_details:
-    #         return True
-
-    #     details = self.contract_details[req_id]
-    #     expiry = datetime.datetime.strptime(details.contract.lastTradeDateOrContractMonth, '%Y%m%d')
-    #     expiry = pytz.timezone('US/Eastern').localize(expiry)
-        
-    #     now = datetime.datetime.now(pytz.timezone('US/Eastern'))
-    #     days_to_expiry = (expiry - now).days
-        
-    #     return days_to_expiry <= days_before_expiry
-
-    # def rollover_contract(self, ticker, exchange, ccy):
-    #     """Roll over to the next contract"""
-    #     self.current_contract = None
-    #     return self.get_current_contract(ticker, exchange, ccy)
-
     def get_historical_data(self, contract, duration='1 D', bar_size='1 min', timezone='US/Eastern', RTH=False):
         """Get historical data for the current contract"""
         req_id = self.get_next_req_id()
@@ -171,7 +139,7 @@ class IBConnection(EWrapper, EClient):
             duration,
             bar_size,
             "TRADES",  # Use actual trade prices
-            False,  # useRTH
+            RTH,  # Regular trading hours
             1,  # formatDate
             False,  # keepUpToDate
             []  # chartOptions
@@ -200,7 +168,6 @@ class IBConnection(EWrapper, EClient):
             self.historical_data[req_id] = new_bars_df
 
         return self.historical_data.pop(req_id, [])
-
 
     def historicalData(self, reqId: int, bar: BarData):
         """Callback for historical data"""
