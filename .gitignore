@@ -6,3 +6,8 @@ output/
 output/*
 output/**/*
 trading.db
+__pycache__/
+.vscode/*
+.vscode/
+.vscode
+venv/
