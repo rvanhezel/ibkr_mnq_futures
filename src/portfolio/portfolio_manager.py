@@ -162,6 +162,8 @@ class PortfolioManager:
             for position in self.positions:
                 logging.info(str(position))
 
+        self.db.print_all_entries()
+
     def daily_pnl(self):
         """Update the daily PnL. The daily pnl is made up from the PnL of all filled orders."""
         pnl = 0
@@ -241,8 +243,6 @@ class PortfolioManager:
                 self.db.add_order_status(order_id, status)
 
             self.update_positions()
-
-            self.db.print_all_entries()
 
         else:
             logging.error("Failed to place all orders.")
@@ -390,7 +390,6 @@ class PortfolioManager:
             self.db.add_order_status(order_id, self._get_order_status(order_id))
 
             self.update_positions()
-            self.db.print_all_entries()
 
         elif position.quantity == 0:
             msg = f"Position {position.ticker} with quantity {position.quantity}. No positions to close"

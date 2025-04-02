@@ -2,5 +2,7 @@
 notes.txt
 tests.py
 /test*.py
-to_review/
 output/
+output/*
+output/**/*
+trading.db
