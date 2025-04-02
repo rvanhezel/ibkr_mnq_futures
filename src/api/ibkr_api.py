@@ -504,8 +504,14 @@ class IBConnection(EWrapper, EClient):
 
     def cancel_order(self, order_id: int):
         """Cancel a specific order by its ID. OrderStatus callback is used"""
+        self._order_statuses[order_id] = {}
         self.cancelOrder(order_id, OrderCancel())
-  
+
+        timeout = self.timeout
+        while not self._order_statuses[order_id] and timeout > 0:
+            time.sleep(0.1)
+            timeout -= 0.1
+
     def req_realtime_bars(self, contract, use_rth):
         """Request real-time 5s bars"""
         req_id = self.get_next_req_id()
