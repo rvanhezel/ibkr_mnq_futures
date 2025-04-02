@@ -6,7 +6,6 @@ from ibapi.order import Order
 from ibapi.contract import Contract
 import os
 from src.portfolio.position import Position
-from src.portfolio.trading_order import TradingOrder
 from src.api.ibkr_api import IBConnection
 from src.configuration import Configuration
 import logging

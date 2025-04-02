@@ -11,6 +11,7 @@ import holidays
 
 
 class RiskManager:
+    
     def __init__(self, 
                  timezone, 
                  trading_start_time, 

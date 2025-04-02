@@ -13,7 +13,6 @@ import logging
 import socket
 import pandas as pd
 import os
-from src.portfolio.trading_order import TradingOrder
 from src.utilities.utils import get_third_friday, get_local_timezone
 
 
@@ -179,52 +178,6 @@ class IBConnection(EWrapper, EClient):
         # logging.info(f"Historical data end: {reqId}, {start}, {end}")
         pass
 
-    def place_trading_order(self, trading_order: TradingOrder):
-        """Place a trading order"""
-        logging.info(f"Placing trading order: {trading_order}")
-        
-        order = Order()
-        order.action = trading_order.action
-        order.totalQuantity = trading_order.quantity
-        order.orderType = trading_order.order_type
-        order.transmit = trading_order.transmit
-
-
-        if order.orderType == "LMT":
-            order.lmtPrice = trading_order.aux_price
-            
-        elif order.orderType == "STP":
-            order.auxPrice = trading_order.aux_price
-            order.outsideRth = True
-
-        elif order.orderType == "MKT":
-            pass
-        else:
-            raise TypeError(f"Invalid order type: {order.orderType}")
-
-        contract = Contract()
-        contract.symbol = trading_order.symbol
-        contract.secType = trading_order.security
-        contract.exchange = trading_order.exchange
-        contract.currency = trading_order.currency
-        contract.lastTradeDateOrContractMonth = trading_order.expiry
-        
-        order_id = self.next_order_id
-        self.next_order_id += 1
-
-        order.orderId = order_id
-        
-        self._order_statuses[order_id] = {}
-        self.placeOrder(order_id, contract, order)
-
-        timeout = self.timeout
-        while not self._order_statuses[order_id] and timeout > 0:
-            time.sleep(0.1)
-            timeout -= 0.1
-
-        trading_order.update_post_fill(status=self._order_statuses[order_id].get('status', None), order_id=order_id)
-
-
     def place_market_order(self, contract, action, quantity):
         """Place a market order"""
         order = Order()
@@ -270,10 +223,6 @@ class IBConnection(EWrapper, EClient):
         else:
             logging.error(f"IBKR API: Order {order_id} not found in order_statuses")
             return None
-    
-    def update_order_status(self, order: TradingOrder):
-        """Update the status of an order"""
-        order.status = self.get_order_status(order.order_id).get('status', None)
 
     def place_stop_loss_order(self, contract, parent_order_id, quantity, stop_price):
         """Place a stop-loss order"""
@@ -480,7 +429,6 @@ class IBConnection(EWrapper, EClient):
         elif tickType == 4:  # Last
             self.market_data[reqId]['last'] = price
 
-
     def place_orders(self, orders:list[Order], contract:Contract):
         """Place multiple orders"""
         for order in orders:
@@ -491,7 +439,6 @@ class IBConnection(EWrapper, EClient):
             while not self._order_statuses[order.orderId] and timeout > 0:
                 time.sleep(0.1)
                 timeout -= 0.1
-
 
     def create_bracket_order(self,
                              action:str,
@@ -533,21 +480,6 @@ class IBConnection(EWrapper, EClient):
 
         bracketOrder = [parent, takeProfit, stopLoss]
         return bracketOrder
-
-    # def get_contract_from_order_id(self, order_id: int) -> Contract:
-    #     req_id = self.get_next_req_id()
-    #     self.open_orders[req_id] = None
-        
-    #     # Request all open orders
-    #     self.reqOpenOrders()
-        
-    #     # Wait for response
-    #     timeout = self.timeout
-    #     while self.order_contracts[req_id] is None and timeout > 0:
-    #         time.sleep(0.1)
-    #         timeout -= 0.1
-            
-    #     return self.order_contracts.get(req_id, {}).get('contract')
 
     def request_open_orders(self):
         if not self.open_orders_requested:
