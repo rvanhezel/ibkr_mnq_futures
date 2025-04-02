@@ -1,11 +1,7 @@
 from src.utilities.logger import Logger
 from src.configuration import Configuration
-
 from dotenv import load_dotenv
 from src.trading_system import TradingSystem
-import time
-import logging
-import os
 
 
 if __name__ == "__main__":
