@@ -8,4 +8,5 @@ __pycache__/
 .vscode/*
 .vscode/
 venv/
+node_modules/
 
