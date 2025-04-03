@@ -475,6 +475,7 @@ class IBConnection(EWrapper, EClient):
         stopLoss.totalQuantity = quantity
         stopLoss.parentId = parent_order_id
         stopLoss.transmit = True
+        stopLoss.outsideRth = True
 
         self.next_order_id += 1
 
