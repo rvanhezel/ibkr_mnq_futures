@@ -1,17 +1,22 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import logging
 import os
 import sys
 import json
 import configparser
+import logging
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# Add the project root directory to the Python path
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(project_root)
+
+from src.trading_system import TradingSystem
+from src.configuration import Configuration
+from src.utilities.logger import Logger
+
+
+# Initialize logger
+logger = Logger()
 
 app = Flask(__name__)
 # Configure CORS to allow requests from the frontend
@@ -23,85 +28,69 @@ CORS(app, resources={
     }
 })
 
-# Initialize configuration
+# Initialize configuration and trading system
 try:
-    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'run.cfg')
-    logger.info(f"Loading configuration from: {config_path}")
+    config_path = os.path.join(project_root, 'run.cfg')
+    logging.info(f"Loading configuration from: {config_path}")
     
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Configuration file not found at: {config_path}")
     
-    cfg = configparser.ConfigParser()
-    cfg.read(config_path)
+    cfg = Configuration(config_path)
+    trading_system = TradingSystem(cfg)
     
-    # Verify all required sections exist
-    required_sections = ['Run', 'Trading', 'Risk_Management', 'Market_Data', 'API', 'Technical_Indicators']
-    missing_sections = [section for section in required_sections if section not in cfg]
-    if missing_sections:
-        raise ValueError(f"Missing required configuration sections: {missing_sections}")
-    
-    logger.info("Configuration loaded successfully")
+    logging.info("Configuration and trading system initialized successfully")
 except Exception as e:
-    logger.error(f"Error initializing configuration: {str(e)}")
+    logging.error(f"Error initializing configuration: {str(e)}")
     raise
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
     """Get trading system status"""
     try:
-        logger.info("Fetching trading system status")
-        # For now, return mock data
+        logging.info("Fetching trading system status")
         return jsonify({
-            'status': 'stopped',
-            'last_update': '2024-01-01 00:00:00',
-            'positions': [
-                {
-                    'symbol': 'MNQ',
-                    'quantity': 0,
-                    'avg_price': 0,
-                    'unrealized_pnl': 0,
-                    'realized_pnl': 0
-                }
-            ],
-            'orders': [
-                {
-                    'order_id': '123',
-                    'symbol': 'MNQ',
-                    'action': 'BUY',
-                    'quantity': 1,
-                    'order_type': 'LIMIT',
-                    'limit_price': 17000,
-                    'status': 'FILLED',
-                    'filled_quantity': 1,
-                    'remaining_quantity': 0,
-                    'timestamp': '2024-01-01 00:00:00'
-                }
-            ]
+            'status': 'running' if trading_system.is_running else 'stopped',
+            'last_update': trading_system.last_update_time,
+            'positions': trading_system.portfolio_manager.get_positions(),
+            'orders': trading_system.order_manager.get_recent_orders()
         })
     except Exception as e:
-        logger.error(f"Error getting status: {str(e)}")
+        logging.error(f"Error getting status: {str(e)}")
         return jsonify({'error': f'Error getting status: {str(e)}'}), 500
 
 @app.route('/api/start', methods=['POST'])
 def start_trading():
     """Start the trading system"""
     try:
-        logger.info("Starting trading system")
-        # TODO: Implement actual trading system start
-        return jsonify({'message': 'Trading system started successfully'})
+        logging.info("Starting trading system")
+        if trading_system.is_running:
+            return jsonify({'error': 'Trading system is already running'}), 400
+        
+        trading_system.start()
+        return jsonify({
+            'message': 'Trading system started successfully',
+            'status': 'running'
+        })
     except Exception as e:
-        logger.error(f"Error starting trading system: {str(e)}")
+        logging.error(f"Error starting trading system: {str(e)}")
         return jsonify({'error': f'Error starting trading system: {str(e)}'}), 500
 
 @app.route('/api/stop', methods=['POST'])
 def stop_trading():
     """Stop the trading system"""
     try:
-        logger.info("Stopping trading system")
-        # TODO: Implement actual trading system stop
-        return jsonify({'message': 'Trading system stopped successfully'})
+        logging.info("Stopping trading system")
+        if not trading_system.is_running:
+            return jsonify({'error': 'Trading system is not running'}), 400
+        
+        trading_system.stop()
+        return jsonify({
+            'message': 'Trading system stopped successfully',
+            'status': 'stopped'
+        })
     except Exception as e:
-        logger.error(f"Error stopping trading system: {str(e)}")
+        logging.error(f"Error stopping trading system: {str(e)}")
         return jsonify({'error': f'Error stopping trading system: {str(e)}'}), 500
 
 @app.route('/api/positions', methods=['GET'])
@@ -132,7 +121,7 @@ def handle_settings():
             return '', 200
             
         if request.method == 'GET':
-            logger.info("Fetching settings")
+            logging.info("Fetching settings")
             try:
                 # Convert config to dictionary format
                 settings = {
@@ -179,16 +168,16 @@ def handle_settings():
                         'rsi_threshold': cfg.get('Technical_Indicators', 'rsi_threshold')
                     }
                 }
-                logger.info(f"Returning settings: {settings}")
+                logging.info(f"Returning settings: {settings}")
                 return jsonify(settings)
             except Exception as e:
-                logger.error(f"Error reading settings: {str(e)}")
+                logging.error(f"Error reading settings: {str(e)}")
                 return jsonify({'error': f'Error reading settings: {str(e)}'}), 500
         else:  # POST
             try:
-                logger.info("Updating settings")
+                logging.info("Updating settings")
                 new_settings = request.json
-                logger.info(f"Received new settings: {new_settings}")
+                logging.info(f"Received new settings: {new_settings}")
                 
                 # Update settings in config
                 # Run section
@@ -237,13 +226,13 @@ def handle_settings():
                 with open(config_path, 'w') as f:
                     cfg.write(f)
                 
-                logger.info("Settings updated successfully")
+                logging.info("Settings updated successfully")
                 return jsonify({'message': 'Settings updated successfully'})
             except Exception as e:
-                logger.error(f"Error updating settings: {str(e)}")
+                logging.error(f"Error updating settings: {str(e)}")
                 return jsonify({'error': f'Error updating settings: {str(e)}'}), 500
     except Exception as e:
-        logger.error(f"Error handling settings request: {str(e)}")
+        logging.error(f"Error handling settings request: {str(e)}")
         return jsonify({'error': f'Error handling settings request: {str(e)}'}), 500
 
 if __name__ == '__main__':
