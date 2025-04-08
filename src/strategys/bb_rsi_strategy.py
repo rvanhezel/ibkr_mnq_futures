@@ -22,6 +22,7 @@ class BollingerBandRSIStrategy(AbstractStrategy):
         ta.calculate_indicators(historical_data)
         
         if len(historical_data) < 2:
+            historical_data.loc[historical_data.index[-1], 'signal'] = Signal.HOLD.name
             return Signal.HOLD
             
         last_row = historical_data.iloc[-1]
@@ -33,9 +34,11 @@ class BollingerBandRSIStrategy(AbstractStrategy):
                         last_row['rsi'] > ta.rsi_threshold)
         
         if price_below_mid_bb and rsi_crossover:
+            historical_data.loc[historical_data.index[-1], 'signal'] = Signal.BUY.name
             logging.debug("BollingerBandRSIStrategy: BUY signal generated.")
             return Signal.BUY
         else:
+            historical_data.loc[historical_data.index[-1], 'signal'] = Signal.HOLD.name
             logging.debug("BollingerBandRSIStrategy: HOLD signal generated.")
             return Signal.HOLD
             
