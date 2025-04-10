@@ -80,8 +80,8 @@ class Configuration:
             raise ValueError(f"Unknown API type: {self.api}. Must be either 'TWS' or 'IBG'")
 
     def _check_contract_number(self, contract_number: int):
-        if contract_number != 2 :
-            raise ValueError("Contract number must be 2")
+        if contract_number <= 0 :
+            raise ValueError("Contract number must be greater than 0")
         return contract_number
     
     def _check_paper_trading(self, paper_trading: bool):

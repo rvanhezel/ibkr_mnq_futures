@@ -405,7 +405,7 @@ class Database:
                         row = " | ".join(f"{str(val):<8}" for val in order)
                         logging.debug(row)
                 else:
-                    logging.debug("\nNo orders found")
+                    logging.debug("No orders found")
 
                 # Print Positions
                 logging.debug("=== POSITIONS ===")
