@@ -384,12 +384,13 @@ class Database:
 
     def print_all_entries(self):
         """Print all entries from all tables in a readable format"""
+        logging.debug("=== DATABASE ENTRIES ===")
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
                 # Print Orders
-                print("\n=== ORDERS ===")
+                logging.debug("=== ORDERS ===")
                 cursor.execute("PRAGMA table_info(orders)")
                 order_columns = [col[1] for col in cursor.fetchall()]
                 cursor.execute('SELECT * FROM orders')
@@ -397,17 +398,17 @@ class Database:
                 if orders:
                     # Create header with column names
                     header = " | ".join(f"{col:<8}" for col in order_columns)
-                    print(header)
-                    print("-" * len(header))
+                    logging.debug(header)
+                    logging.debug("-" * len(header))
                     # Print data rows
                     for order in orders:
                         row = " | ".join(f"{str(val):<8}" for val in order)
-                        print(row)
+                        logging.debug(row)
                 else:
-                    print("No orders found")
+                    logging.debug("\nNo orders found")
 
                 # Print Positions
-                print("\n=== POSITIONS ===")
+                logging.debug("=== POSITIONS ===")
                 cursor.execute("PRAGMA table_info(positions)")
                 position_columns = [col[1] for col in cursor.fetchall()]
                 cursor.execute('SELECT * FROM positions')
@@ -415,17 +416,17 @@ class Database:
                 if positions:
                     # Create header with column names
                     header = " | ".join(f"{col:<10}" for col in position_columns)
-                    print(header)
-                    print("-" * len(header))
+                    logging.debug(header)
+                    logging.debug("-" * len(header))
                     # Print data rows
                     for pos in positions:
                         row = " | ".join(f"{str(val):<10}" for val in pos)
-                        print(row)
+                        logging.debug(row)
                 else:
-                    print("No positions found")
+                    logging.debug("No positions found")
 
                 # Print Trading Pauses
-                print("\n=== TRADING PAUSES ===")
+                logging.debug("=== TRADING PAUSES ===")
                 cursor.execute("PRAGMA table_info(trading_pause)")
                 pause_columns = [col[1] for col in cursor.fetchall()]
                 cursor.execute('SELECT * FROM trading_pause')
@@ -433,17 +434,17 @@ class Database:
                 if pauses:
                     # Create header with column names
                     header = " | ".join(f"{col:<15}" for col in pause_columns)
-                    print(header)
-                    print("-" * len(header))
+                    logging.debug(header)
+                    logging.debug("-" * len(header))
                     # Print data rows
                     for pause in pauses:
                         row = " | ".join(f"{str(val):<15}" for val in pause)
-                        print(row)
+                        logging.debug(row)
                 else:
-                    print("No trading pauses found")
+                    logging.debug("No trading pauses found")
 
                 # Print Order Statuses
-                print("\n=== ORDER STATUSES ===")
+                logging.debug("=== ORDER STATUSES ===")
                 cursor.execute("PRAGMA table_info(order_status)")
                 status_columns = [col[1] for col in cursor.fetchall()]
                 cursor.execute('SELECT * FROM order_status')
@@ -451,14 +452,14 @@ class Database:
                 if statuses:
                     # Create header with column names
                     header = " | ".join(f"{col:<12}" for col in status_columns)
-                    print(header)
-                    print("-" * len(header))
+                    logging.debug(header)
+                    logging.debug("-" * len(header))
                     # Print data rows
                     for status in statuses:
                         row = " | ".join(f"{str(val):<12}" for val in status)
-                        print(row)
+                        logging.debug(row)
                 else:
-                    print("No order statuses found")
+                    logging.debug("No order statuses found")
 
                 return True
         except Exception as e:
