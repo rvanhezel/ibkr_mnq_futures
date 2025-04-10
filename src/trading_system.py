@@ -164,14 +164,16 @@ class TradingSystem:
 
         else:
 
-            # if new_bars_df.index[-1] <= self.market_data.index[-1]:
             if new_bars_df.index[-1] == self.market_data.index[-1]:
                 logging.debug(f"Latest data timestamp obtained: {new_bars_df.index[-1]}. No new data since last loop.")
                 return
             else:
                 logging.debug(f"Latest data timestamp obtained: {new_bars_df.index[-1]}. New data since last loop.")
 
-            self.market_data = pd.concat([self.market_data, new_bars_df])
+            self.market_data = pd.concat([
+                self.market_data, 
+                new_bars_df[~new_bars_df.index.isin(self.market_data.index)]
+                ])
             self.market_data = self.market_data[~self.market_data.index.duplicated(keep='last')]
             self.market_data.sort_index(inplace=True)
             
