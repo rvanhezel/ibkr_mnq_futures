@@ -165,7 +165,7 @@ class PortfolioManager:
 
     def daily_pnl(self):
         """Update the daily PnL. The daily pnl is made up from the PnL of all filled orders."""
-        pnl = 0
+        index_pnl = 0
 
         for bracket_order in self.orders:
             # a backet order only hits realized pnl if 2 out of 3 orders are filled
@@ -199,9 +199,9 @@ class PortfolioManager:
                     filled_count += 1
                 
             if filled_count >= 2:
-                pnl += current_order_pnl
+                index_pnl += current_order_pnl
 
-        return pnl
+        return index_pnl * self.config.mnq_point_value
 
     def place_bracket_order(self, contract: Contract = None):
         """Place a bracket order"""

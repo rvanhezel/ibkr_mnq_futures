@@ -133,11 +133,16 @@ class TradingSystem:
 
             # Check if it's near end of trading day (3:59 PM or later)
             now = pd.Timestamp.now(tz=self.config.timezone)
-            self.risk_manager.perform_eod_close(
+            if self.risk_manager.perform_eod_close(
                 now, 
                 self.config.eod_exit_time,
                 self.config.trading_end_time,
-                self.portfolio_manager)
+                self.portfolio_manager):
+                eod_pnl = self.portfolio_manager.daily_pnl()
+                df = pd.DataFrame({'pnl': [eod_pnl]})
+                df.to_csv(os.path.join(os.getcwd(), 'output', 'eod_pnl.csv'), index=False)
+                logging.info(f"End of day PnL: {eod_pnl}")
+
 
             self._save_market_data()
 
