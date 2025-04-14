@@ -160,12 +160,8 @@ class TradingSystem:
                                                    str(self.config.bar_size),
                                                    self.config.timezone)
         
-        if new_bars_df:
+        if isinstance(new_bars_df, pd.DataFrame) and not new_bars_df.empty:
 
-            if new_bars_df.empty:
-                logging.warning("No historical data available")
-                return
-            
             if self.market_data.empty:
                 self.market_data = new_bars_df
 
