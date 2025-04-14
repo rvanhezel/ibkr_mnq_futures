@@ -147,13 +147,18 @@ class TradingSystem:
 
                 self._check_trading_opportunities()
 
-                # Check if it's near end of trading day (3:59 PM or later)
-                now = pd.Timestamp.now(tz=self.config.timezone)
-                self.risk_manager.perform_eod_close(
-                    now, 
-                    self.config.eod_exit_time,
-                    self.config.trading_end_time,
-                    self.portfolio_manager)
+            # Check if it's near end of trading day (3:59 PM or later)
+            now = pd.Timestamp.now(tz=self.config.timezone)
+            if self.risk_manager.perform_eod_close(
+                now, 
+                self.config.eod_exit_time,
+                self.config.trading_end_time,
+                self.portfolio_manager):
+                eod_pnl = self.portfolio_manager.daily_pnl()
+                df = pd.DataFrame({'pnl': [eod_pnl]})
+                df.to_csv(os.path.join(os.getcwd(), 'output', 'eod_pnl.csv'), index=False)
+                logging.info(f"End of day PnL: {eod_pnl}")
+
 
                 self._save_market_data()
                 self.last_update_time = now
@@ -175,18 +180,31 @@ class TradingSystem:
                                                    str(self.config.horizon), 
                                                    str(self.config.bar_size),
                                                    self.config.timezone)
-
-        if new_bars_df.empty:
-            logging.warning("No historical data available")
-            return
         
-        if self.market_data.empty:
-            self.market_data = new_bars_df
+        if isinstance(new_bars_df, pd.DataFrame) and not new_bars_df.empty:
+
+            if self.market_data.empty:
+                self.market_data = new_bars_df
+
+            else:
+
+                if new_bars_df.index[-1] == self.market_data.index[-1]:
+                    logging.debug(f"Latest data timestamp obtained: {new_bars_df.index[-1]}. No new data since last loop.")
+                    return
+                else:
+                    logging.debug(f"Latest data timestamp obtained: {new_bars_df.index[-1]}. New data since last loop.")
+
+                self.market_data = pd.concat([
+                    self.market_data, 
+                    new_bars_df[~new_bars_df.index.isin(self.market_data.index)]
+                    ])
+                self.market_data = self.market_data[~self.market_data.index.duplicated(keep='last')]
+                self.market_data.sort_index(inplace=True)
+
         else:
-            self.market_data = pd.concat([self.market_data, new_bars_df])
-            self.market_data = self.market_data[~self.market_data.index.duplicated(keep='last')]
-            self.market_data.sort_index(inplace=True)
-            
+            logging.error("No data returned from IBKR API")
+            return
+                
         if self.config.strategy == 'bollinger_rsi':
             signal = self.strategy.generate_signals(self.market_data, self.config)
         elif self.config.strategy == 'buy':

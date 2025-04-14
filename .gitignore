@@ -9,4 +9,4 @@ __pycache__/
 .vscode/
 venv/
 node_modules/
-
+*ipynb
