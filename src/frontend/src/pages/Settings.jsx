@@ -431,10 +431,10 @@ const Settings = ({ setSystemError, setSystemSuccess }) => {
               </div>
             </div>
 
-            <div className="flex justify-end items-center space-x-4">
+            <div className="flex justify-start items-center space-x-4">
               <button
                 type="submit"
-                className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
               >
                 Save Settings
               </button>
@@ -449,14 +449,16 @@ const Settings = ({ setSystemError, setSystemSuccess }) => {
             <p className="text-gray-600">
               Reinitialize the database to start fresh. This will delete all existing data and reset PnL
             </p>
-            <button
-              onClick={handleReinitializeDB}
-              disabled={isLoading}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Reinitializing...' : 'Reinitialize Database'}
-            </button>
           </div>
+        </div>
+        <div className="flex justify-start items-center space-x-4 mt-4">
+          <button
+            onClick={handleReinitializeDB}
+            disabled={isLoading}
+            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
+          >
+            {isLoading ? 'Reinitializing...' : 'Reinitialize Database'}
+          </button>
         </div>
       </div>
     </div>
