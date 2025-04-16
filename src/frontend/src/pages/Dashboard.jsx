@@ -175,19 +175,20 @@ const Dashboard = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Symbol</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {status?.orders?.map((order, index) => (
+                {[...(status?.orders || [])].reverse().map((order, index) => (
                   <tr key={index}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.order_id}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.symbol}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.symbol || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.order_type}</td>
                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${
                       order.action === 'BUY' ? 'text-green-600' : 'text-red-600'
                     }`}>
@@ -203,9 +204,8 @@ const Dashboard = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {order.filled_quantity}/{order.quantity}
+                      {order.total_quantity}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.timestamp}</td>
                   </tr>
                 ))}
                 {(!status?.orders || status.orders.length === 0) && (
