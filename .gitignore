@@ -10,3 +10,4 @@ __pycache__/
 venv/
 node_modules/
 *ipynb
+node_modules/

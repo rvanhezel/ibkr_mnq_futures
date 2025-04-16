@@ -12,7 +12,7 @@ class Period:
     def _check_frequency(self, tenor: str):
         if tenor == "m":
             raise ValueError("Superfluous 'm' tenor. Use min for minutes or M for month.")
-        elif tenor not in ("min", "b", "d", "W", "M", "Q", "SA", "Y", "D", "B"):
+        elif tenor not in ("min", "mins", "b", "d", "W", "M", "Q", "SA", "Y", "D", "B"):
             raise ValueError("tenor not recognized")
         
         return tenor
