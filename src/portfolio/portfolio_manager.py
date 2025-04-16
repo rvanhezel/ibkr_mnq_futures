@@ -13,14 +13,16 @@ import time
 from src.db.database import Database
 from src.api.api_utils import get_current_contract, order_from_dict
 from src.utilities.utils import trading_day_start_time_ts
+from src.api.message_queue import MessageQueue
 
 
 class PortfolioManager:
 
-    def __init__(self, config: Configuration, api: IBConnection, db: Database):
+    def __init__(self, config: Configuration, api: IBConnection, db: Database, message_queue: MessageQueue = None):
         self.config = config
         self.api = api
         self.db = db
+        self.message_queue = message_queue
 
         self.positions: List[Position] = []
         self.orders: List[List[(Order, bool)]] = []       #list of bracket orders (list of 3 orders). bool is for whether an order has been resubmitted when cancelled
@@ -38,7 +40,7 @@ class PortfolioManager:
             logging.error(f"Order {order_id} not found in API or local order statuses")
             return None
         
-    def update_positions(self):
+    def update_positions(self, display_entries: bool = True):
         """Update the positions from the API."""
         logging.info(f"{self.__class__.__name__}: Updating positions from orders.")
         logging.debug(f"{self.__class__.__name__}: There are {self._total_orders()} orders")
@@ -161,7 +163,8 @@ class PortfolioManager:
             for position in self.positions:
                 logging.info(str(position))
 
-        self.db.print_all_entries()
+        if display_entries:
+            self.db.print_all_entries()
 
     def daily_pnl(self):
         """Update the daily PnL. The daily pnl is made up from the PnL of all filled orders."""
@@ -594,28 +597,77 @@ class PortfolioManager:
 
                 if matching_position is None:
                     msg = f"Inconsistent DB state: Position {latest_db_position.ticker} with quantity {latest_db_position.quantity}"
-                    msg += f" from DB not found in IBKR. Reinitializing database and portfolio state."
+                    msg += f" from DB not found in IBKR. Please reinitialize database."
                     logging.error(msg)
+                    self.message_queue.add_sys_error(msg)
 
                     self.cancel_all_orders()
                     self.clear_orders_statuses_positions()
-                    self.db.reinitialize()
-                    self.db.print_all_entries()
+                    # self.db.reinitialize()
+                    # self.db.print_all_entries()
+
+                    raise ValueError(msg)
 
                 elif latest_db_position.quantity > int(matching_position['position']):
                     msg = f"Inconsistent DB state: Position {latest_db_position.ticker} has {latest_db_position.quantity} contracts."
                     msg += f" Only {int(matching_position['position'])} contracts are found on IBKR."
-                    msg += f" Reinitializing database and portfolio state."
+                    msg += f" Please reinitialize database."
                     logging.error(msg)
+                    self.message_queue.add_sys_error(msg)
                     
                     self.cancel_all_orders()
                     self.clear_orders_statuses_positions()
-                    self.db.reinitialize()
-                    self.db.print_all_entries()
+                    # self.db.reinitialize()
+                    # self.db.print_all_entries()
+
+                    raise ValueError(msg)
+
                 else:
                     logging.info("DB state consistent with IBKR.")
 
         return len(loaded_orders), len(self.order_statuses), len(self.positions)
+
+    def get_all_positions(self) -> List[Dict]:
+        """Get all positions as serializable dictionaries"""
+        logging.debug(f"PortfolioManager: Updating positions and returns for api calls.")
+        # self.update_positions(False)
+
+        positions = []
+        for position in self.positions:
+            pos_dict = {
+                'symbol': position.ticker,
+                'security': position.security,
+                'currency': position.currency,
+                'expiry': position.expiry,
+                'contract_id': position.contract_id,
+                'quantity': position.quantity,
+                'avg_price': position.avg_price,
+                'time_opened': position.time_opened
+            }
+            positions.append(pos_dict)
+        return positions
+
+    def get_all_orders(self) -> List[Dict]:
+        """Get all orders as serializable dictionaries"""
+        orders = []
+        for bracket_order in self.orders:
+            for order, resubmitted in bracket_order:
+                order_status = self._get_order_status(order.orderId)
+                order_details = self.api.get_open_order(order.orderId)
+                contract = order_details['contract'] if order_details else None
+                order_dict = {
+                    'order_id': order.orderId,
+                    'symbol': contract.symbol if contract else 'N/A',
+                    'action': order.action,
+                    'total_quantity': order.totalQuantity,
+                    'order_type': order.orderType,
+                    'limit_price': order.lmtPrice,
+                    'stop_price': order.auxPrice,
+                    'status': order_status['status'] if order_status else 'Unknown',
+                    'resubmitted': resubmitted
+                }
+                orders.append(order_dict)
+        return orders
 
 
 

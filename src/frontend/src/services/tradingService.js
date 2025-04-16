@@ -47,4 +47,23 @@ export const stopTrading = async () => {
         console.error('Error stopping trading:', error);
         throw error;
     }
+};
+
+export const reinitializeDatabase = async () => {
+    try {
+        const response = await fetch(`${API_URL}/reinitialize-db`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error || `HTTP error! status: ${response.status}`);
+        }
+        return data;
+    } catch (error) {
+        console.error('Error reinitializing database:', error);
+        throw error;
+    }
 }; 

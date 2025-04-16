@@ -14,11 +14,12 @@ import socket
 import pandas as pd
 import os
 from src.utilities.utils import get_third_friday, get_local_timezone
+from src.api.message_queue import MessageQueue
 
 
 class IBConnection(EWrapper, EClient):
     
-    def __init__(self, host, port, client_id, timeout, timezone):
+    def __init__(self, host, port, client_id, timeout, timezone, message_queue: MessageQueue = None):
         # Suppress IBKR API's internal debug messages
         logging.getLogger('ibapi').setLevel(logging.WARNING)
         logging.getLogger('ibapi.wrapper').setLevel(logging.WARNING)
@@ -30,6 +31,7 @@ class IBConnection(EWrapper, EClient):
         self.client_id = client_id
         self.timeout = timeout
         self.timezone = timezone
+        self.message_queue = message_queue
         self.account_id = os.getenv('IBKR_ACCOUNT_ID')
 
         self.local_timezone = get_local_timezone()
@@ -56,6 +58,10 @@ class IBConnection(EWrapper, EClient):
         self.lock = threading.Lock()
 
     @property
+    def last_error(self):
+        return self._last_error
+
+    @property
     def order_statuses(self):
         return self._order_statuses
 
@@ -80,7 +86,12 @@ class IBConnection(EWrapper, EClient):
                 
         except (TimeoutError, ConnectionRefusedError, socket.error, ConnectionError) as e:
             self.connected = False
-            raise ConnectionError(f"{str(e)}")
+            error_msg = str(e)
+            if "Connection refused" in error_msg:
+                error_msg = "Could not connect to TWS/Gateway. Please ensure it is running and the port is correct."
+            elif "timed out" in error_msg:
+                error_msg = "Connection timed out. Please check your network connection and TWS/Gateway settings."
+            raise ConnectionError(error_msg)
         
         except Exception as e:
             logging.error(f"Unexpected error while connecting to Interactive Brokers: {str(e)}")
@@ -89,11 +100,33 @@ class IBConnection(EWrapper, EClient):
 
     def disconnect(self):
         """Disconnect from Interactive Brokers"""
-        if self.connected:
-            self.done = True
-            super().disconnect()
+        try:
+            if self.connected:
+                self.done = True
+
+                # super().disconnect() resets host and port which is not what we want
+                cur_host = self.host
+                cur_port = self.port
+                cur_client_id = self.client_id
+
+                super().disconnect()
+
+                self.host = cur_host
+                self.port = cur_port
+                self.client_id = cur_client_id
+
+                time.sleep(1)
+                # Reset connection state
+                self.connected = False
+                self.next_order_id = None
+                self.next_req_id = 0
+
+                logging.info("Successfully disconnected from Interactive Brokers")
+                time.sleep(3)
+
+        except Exception as e:
+            logging.error(f"Error during disconnection: {str(e)}")
             self.connected = False
-            logging.info("Disconnected from Interactive Brokers")
 
     def nextValidId(self, orderId: int):
         """Callback for next valid order ID"""
@@ -269,8 +302,14 @@ class IBConnection(EWrapper, EClient):
         return order_id, self._order_statuses[order_id]
 
     def error(self, req_id, error_code, error_string, misc=None):
+        """Handle error messages from IBKR API"""
+        if error_code in [2103, 2105]:
+            logging.warning(f"({error_code}) {error_string}{' ' + str(misc) if misc is not None else ''}")
 
-        if error_code in [2103, 2104, 2105, 2106, 2119, 2158]:
+            if self.message_queue:
+                self.message_queue.add_message(f"Error {error_code}: {error_string}")
+
+        elif error_code in [2104, 2106, 2119, 2158]:
             logging.info(f"({error_code}) {error_string}{' ' + str(misc) if misc is not None else ''}")
 
         elif error_code == 110:
@@ -278,8 +317,14 @@ class IBConnection(EWrapper, EClient):
             msg += f"\n Please check TWS and Discard/Delete any related orders with a 'Transmit' status."
             logging.error(msg)
 
+            if self.message_queue:
+                self.message_queue.add_message(f"Error {error_code}: {error_string}")
+
         else:
             logging.error(f"Error {error_code}: {error_string}{' ' + str(misc) if misc is not None else ''}")
+
+            if self.message_queue:
+                self.message_queue.add_message(f"Error {error_code}: {error_string}")
 
     def get_positions(self):
         """Get current portfolio positions"""

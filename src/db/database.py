@@ -61,7 +61,7 @@ class Database:
             
         except Exception as e:
             msg = f"Error reinitializing database: {str(e)}"
-            msg += f". Please manually delete the database file and restart the program."
+            msg += f". Please retry or manually delete the database file and restart the program."
             logging.error(msg)
             raise Exception(msg)
 

@@ -1,3 +1,4 @@
+from src.api.message_queue import MessageQueue
 from src.utilities.logger import Logger
 import time
 from datetime import datetime
@@ -18,12 +19,14 @@ from src.portfolio.portfolio_manager import PortfolioManager
 class TradingSystem:
 
     def __init__(self, cfg: Configuration):
+        self.message_queue = MessageQueue()
         self.api = IBConnection(
             cfg.ib_host, 
             cfg.ib_port, 
             cfg.ib_client_id, 
             cfg.timeout,
-            cfg.timezone)
+            cfg.timezone,
+            self.message_queue)
         self.risk_manager = RiskManager(
             cfg.timezone, 
             cfg.trading_start_time, 
@@ -36,12 +39,11 @@ class TradingSystem:
         self.strategy = BollingerBandRSIStrategy()
         self.config = cfg
         self.db = Database(self.config.timezone)
-        self.portfolio_manager = PortfolioManager(cfg, self.api, self.db)
+        self.portfolio_manager = PortfolioManager(cfg, self.api, self.db, self.message_queue)
         self.is_running = False
         self.last_update_time = None
 
         self.market_data = pd.DataFrame()
-        
         
     def start(self):
         """Start the trading system"""
@@ -50,6 +52,10 @@ class TradingSystem:
             logging.info("Starting trading system...")
             self.is_running = True
             self.last_update_time = pd.Timestamp.now(tz=self.config.timezone)
+            
+            # required if restarting existing trading system as orders and positions are not cleared
+            # and will be repopulated from db
+            self.portfolio_manager.clear_orders_statuses_positions()        
 
             if self.config.paper_trading:
                 logging.info("Paper trading mode enabled")
@@ -74,14 +80,17 @@ class TradingSystem:
 
         except ConnectionError as e:
             logging.error(f"Failed to connect to Interactive Brokers: {str(e)}")
+            self.message_queue.add_sys_error(str(e))
             self.is_running = False
 
         except KeyboardInterrupt:
             logging.info("KeyboardInterrupt - Shutting down trading system...")
+            self.message_queue.add_sys_error("KeyboardInterrupt")
             self.is_running = False
 
         except Exception as e:
             logging.error(f"Unexpected error within trading system: {str(e)}")
+            self.message_queue.add_sys_error(str(e))
             self.is_running = False
 
         finally:
@@ -95,6 +104,7 @@ class TradingSystem:
         logging.info("Stopping trading system...")
         self.is_running = False
         self.last_update_time = pd.Timestamp.now(tz=self.config.timezone)
+        self.api.disconnect()
 
     def _trading_loop(self):
         """Main trading loop"""
@@ -111,18 +121,24 @@ class TradingSystem:
                     previous_day = now.date()
 
                 if not self.risk_manager.is_trading_day(now):
-                    logging.warning("Not a trading day. Waiting...")
+                    msg = "Not a trading day. Waiting..."
+                    logging.warning(msg)
+                    self.message_queue.add_message(msg)
                     time.sleep(60)
                     continue
                     
                 if not self.risk_manager.is_trading_hours(now):
-                    logging.warning("Outside trading hours. Waiting...")
+                    msg = "Outside trading hours. Waiting..."
+                    logging.warning(msg)
+                    self.message_queue.add_message(msg)
                     self.portfolio_manager.clear_orders_statuses_positions()
                     time.sleep(60)
                     continue
                 
                 if not self.risk_manager.can_resume_trading_after_pause(now):
-                    logging.warning(f"Trading paused triggered until {self.risk_manager.pause_end_time}. Waiting...")
+                    msg = f"Trading paused triggered until {self.risk_manager.pause_end_time}. Waiting..."
+                    logging.warning(msg)
+                    self.message_queue.add_message(msg)
                     time.sleep(60)
                     continue
 
@@ -138,7 +154,9 @@ class TradingSystem:
                 logging.debug(f"PnL: {pnl}")
 
                 if self.risk_manager.should_pause_trading(pnl, self.config.number_of_contracts):
-                    logging.warning(f"PnL: {pnl} is below max 24h loss. Pausing trading.")
+                    msg = f"PnL: {pnl} is below max 24h loss. Pausing trading."
+                    logging.warning(msg)
+                    self.message_queue.add_message(msg)
                     self.risk_manager.set_trading_pause_time(self.db)
 
                     logging.warning(f"Trading paused until {self.risk_manager.pause_end_time}")
@@ -147,17 +165,17 @@ class TradingSystem:
 
                 self._check_trading_opportunities()
 
-            # Check if it's near end of trading day (3:59 PM or later)
-            now = pd.Timestamp.now(tz=self.config.timezone)
-            if self.risk_manager.perform_eod_close(
-                now, 
-                self.config.eod_exit_time,
-                self.config.trading_end_time,
-                self.portfolio_manager):
-                eod_pnl = self.portfolio_manager.daily_pnl()
-                df = pd.DataFrame({'pnl': [eod_pnl]})
-                df.to_csv(os.path.join(os.getcwd(), 'output', 'eod_pnl.csv'), index=False)
-                logging.info(f"End of day PnL: {eod_pnl}")
+                # Check if it's near end of trading day (3:59 PM or later)
+                now = pd.Timestamp.now(tz=self.config.timezone)
+                if self.risk_manager.perform_eod_close(
+                    now, 
+                    self.config.eod_exit_time,
+                    self.config.trading_end_time,
+                    self.portfolio_manager):
+                    eod_pnl = self.portfolio_manager.daily_pnl()
+                    df = pd.DataFrame({'pnl': [eod_pnl]})
+                    df.to_csv(os.path.join(os.getcwd(), 'output', 'eod_pnl.csv'), index=False)
+                    logging.info(f"End of day PnL: {eod_pnl}")
 
 
                 self._save_market_data()
@@ -203,6 +221,7 @@ class TradingSystem:
 
         else:
             logging.error("No data returned from IBKR API")
+            self.message_queue.add_message("No data returned from IBKR API")
             return
                 
         if self.config.strategy == 'bollinger_rsi':
