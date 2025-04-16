@@ -143,8 +143,8 @@ class TradingSystem:
                 df.to_csv(os.path.join(os.getcwd(), 'output', 'eod_pnl.csv'), index=False)
                 logging.info(f"End of day PnL: {eod_pnl}")
 
-
-            self._save_market_data()
+            if self.config.save_market_data:
+                self._save_market_data()
 
             logging.info(f"Trading loop complete. Sleeping for {loop_sleep_time} seconds...")
             time.sleep(loop_sleep_time)           

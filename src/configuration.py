@@ -44,6 +44,7 @@ class Configuration:
         self.mnq_point_value = self.config.getfloat('Market_Data', 'mnq_point_value')
         self.bar_size = Period(self.config.get('Market_Data', 'bar_size'))
         self.horizon = Period(self.config.get('Market_Data', 'horizon'))
+        self.save_market_data = self.config.getboolean('Market_Data', 'save_market_data')
 
         # API section
         self.api = self.config.get('API', 'API')
