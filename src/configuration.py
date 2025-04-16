@@ -17,6 +17,8 @@ class Configuration:
         self.log_level = self._configure_log(self.config.get('Run', 'log_level'))
         logger = logging.getLogger()
         logger.setLevel(self.log_level)
+        
+        self.db_reinitialize_on_error = self.config.getboolean('Run', 'db_reinitialize_on_error')
 
         # Trading section
         self.ticker = self.config.get('Trading', 'ticker')

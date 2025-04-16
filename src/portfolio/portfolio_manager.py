@@ -596,29 +596,54 @@ class PortfolioManager:
                 matching_position = self.api.get_matching_position(latest_db_position)
 
                 if matching_position is None:
-                    msg = f"Inconsistent DB state: Position {latest_db_position.ticker} with quantity {latest_db_position.quantity}"
-                    msg += f" from DB not found in IBKR. Please reinitialize database."
-                    logging.error(msg)
-                    self.message_queue.add_sys_error(msg)
 
-                    self.cancel_all_orders()
-                    self.clear_orders_statuses_positions()
-                    # self.db.reinitialize()
-                    # self.db.print_all_entries()
+                    msg = f"Inconsistent DB state: Position {latest_db_position.ticker} with quantity {latest_db_position.quantity}"
+                    msg += f" from DB not found in IBKR."
+
+                    if self.config.db_reinitialize_on_error:
+                        
+                        msg += f" Reinitializing database."
+                        logging.error(msg)
+                        self.message_queue.add_sys_error(msg)
+
+                        self.cancel_all_orders()
+                        self.clear_orders_statuses_positions()
+                        self.db.reinitialize()
+                        self.db.print_all_entries()
+
+                    else:
+
+                        logging.error(msg)
+                        self.message_queue.add_sys_error(msg)
+
+                        self.cancel_all_orders()
+                        self.clear_orders_statuses_positions()
 
                     raise ValueError(msg)
 
                 elif latest_db_position.quantity > int(matching_position['position']):
+
                     msg = f"Inconsistent DB state: Position {latest_db_position.ticker} has {latest_db_position.quantity} contracts."
                     msg += f" Only {int(matching_position['position'])} contracts are found on IBKR."
-                    msg += f" Please reinitialize database."
-                    logging.error(msg)
-                    self.message_queue.add_sys_error(msg)
+
+                    if self.config.db_reinitialize_on_error:
                     
-                    self.cancel_all_orders()
-                    self.clear_orders_statuses_positions()
-                    # self.db.reinitialize()
-                    # self.db.print_all_entries()
+                        msg += f" Reinitializing database."
+                        logging.error(msg)
+                        self.message_queue.add_sys_error(msg)
+                        
+                        self.cancel_all_orders()
+                        self.clear_orders_statuses_positions()
+                        self.db.reinitialize()
+                        self.db.print_all_entries()
+
+                    else:
+
+                        logging.error(msg)
+                        self.message_queue.add_sys_error(msg)
+
+                        self.cancel_all_orders()
+                        self.clear_orders_statuses_positions()
 
                     raise ValueError(msg)
 
