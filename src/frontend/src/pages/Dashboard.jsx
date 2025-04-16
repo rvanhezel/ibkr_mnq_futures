@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { getStatus, startTrading, stopTrading } from '../services/tradingService';
 
-const Dashboard = () => {
+const Dashboard = ({ systemError, setSystemError, systemSuccess, setSystemSuccess }) => {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [message, setMessage] = useState(null);
 
   useEffect(() => {
     fetchStatus();
@@ -17,9 +18,27 @@ const Dashboard = () => {
     try {
       const data = await getStatus();
       setStatus(data);
+
       setError(null);
+
+      // Update messages from the message queue
+      const newMessage = data?.message;
+      if (newMessage) {
+        setMessage(newMessage);
+        const timer = setTimeout(() => {
+          setMessage(null);
+        }, 3000);
+        return () => clearTimeout(timer);
+      }
+      
+      // Only update system error if we receive a new non-null value
+      if (data?.system_error) {
+        setSystemError(data.system_error);
+      }
+
     } catch (err) {
       setError(err.message);
+
     } finally {
       setIsLoading(false);
     }
@@ -83,9 +102,28 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* Error & success messages */}
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           {error}
+        </div>
+      )}
+
+      {systemError && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          {systemError}
+        </div>
+      )}
+
+      {systemSuccess && (
+        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+          {systemSuccess}
+        </div>
+      )}
+
+      {message && (
+        <div className="px-4 py-3 rounded mb-4 bg-yellow-100 border-yellow-400 text-yellow-700">
+          {message}
         </div>
       )}
 
