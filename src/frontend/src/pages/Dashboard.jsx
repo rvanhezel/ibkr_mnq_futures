@@ -118,8 +118,8 @@ const Dashboard = () => {
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="text-xl font-semibold mb-4">Daily P&L</h2>
           <div className="space-y-2">
-            <p className="text-3xl font-bold text-green-600">
-              $0.00
+            <p className={`text-3xl font-bold ${status?.daily_pnl >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              ${status?.daily_pnl?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
             </p>
             <p className="text-sm text-gray-500">
               Updated: {status?.last_update || 'N/A'}
@@ -127,6 +127,7 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
 
       {/* Bottom Row - Positions and Orders */}
       <div className="grid grid-cols-1 gap-6">
@@ -143,14 +144,19 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {status?.positions?.map((position, index) => (
-                  <tr key={index}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{position.symbol}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{position.quantity}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{position.avg_price}</td>
+                {status?.positions && status.positions.length > 0 ? (
+                  <tr>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {status.positions[status.positions.length - 1].symbol}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {status.positions[status.positions.length - 1].quantity}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {status.positions[status.positions.length - 1].avg_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
                   </tr>
-                ))}
-                {(!status?.positions || status.positions.length === 0) && (
+                ) : (
                   <tr>
                     <td colSpan="3" className="px-6 py-4 text-center text-sm text-gray-500">
                       No positions
