@@ -1,3 +1,4 @@
+from src.utilities.errors import DatabaseStateError
 import copy
 from src.portfolio.position import Position
 import pandas as pd
@@ -619,7 +620,7 @@ class PortfolioManager:
                         self.cancel_all_orders()
                         self.clear_orders_statuses_positions()
 
-                        raise ValueError(msg)
+                        raise DatabaseStateError(msg)
 
                 elif latest_db_position.quantity > int(matching_position['position']):
 
@@ -645,7 +646,7 @@ class PortfolioManager:
                         self.cancel_all_orders()
                         self.clear_orders_statuses_positions()
 
-                        raise ValueError(msg)
+                        raise DatabaseStateError(msg)
 
                 else:
                     logging.info("DB state consistent with IBKR.")
@@ -674,8 +675,6 @@ class PortfolioManager:
 
     def get_all_orders(self) -> List[Dict]:
         """Get all orders as serializable dictionaries"""
-        logging.debug(f"PortfolioManager: Getting all orders")
-
         orders = []
         for bracket_order in self.orders:
             for order, resubmitted in bracket_order:

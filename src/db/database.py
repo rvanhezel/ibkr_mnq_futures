@@ -5,6 +5,7 @@ import pandas as pd
 from typing import Union
 from ibapi.order import Order
 import time
+from src.utilities.errors import DatabaseStateError
 
 
 class Database:
@@ -63,7 +64,7 @@ class Database:
             msg = f"Error reinitializing database: {str(e)}"
             msg += f". Please retry or manually delete the database file and restart the program."
             logging.error(msg)
-            raise Exception(msg)
+            raise DatabaseStateError(msg)
 
     def _init_db(self):  
         """Initialize the database and create tables if they don't exist"""
@@ -168,8 +169,9 @@ class Database:
                     logging.debug(f"Added order {cur_order.orderId} to database")
 
             except Exception as e:
-                logging.error(f"DB: Error adding order to database: {str(e)}")
-                success = False
+                msg = f"DB: Error adding order to database: {str(e)}"
+                logging.error(msg)
+                raise DatabaseStateError(msg)
 
         return success
 

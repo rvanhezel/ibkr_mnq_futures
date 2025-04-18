@@ -1,3 +1,4 @@
+from src.utilities.errors import DatabaseStateError
 from src.api.message_queue import MessageQueue
 from src.utilities.logger import Logger
 import time
@@ -73,8 +74,11 @@ class TradingSystem:
                     self._trading_loop()
                     self.last_update_time = pd.Timestamp.now(tz=self.config.timezone)
 
+                except DatabaseStateError as e:
+                    logging.error(f"DB error in trading loop: {str(e)}")
+                    raise
+
                 except Exception as e:
-                    
                     logging.error(f"Error in trading loop: {str(e)}")
                     time.sleep(10)  
 
@@ -82,6 +86,12 @@ class TradingSystem:
             logging.error(f"Failed to connect to Interactive Brokers: {str(e)}")
             self.message_queue.add_sys_error(str(e))
             self.is_running = False
+
+        except DatabaseStateError as e:
+            logging.error(f"Database state error: {str(e)}")
+            self.message_queue.add_sys_error(str(e))
+            self.is_running = False
+            raise
 
         except KeyboardInterrupt:
             logging.info("KeyboardInterrupt - Shutting down trading system...")
@@ -111,83 +121,79 @@ class TradingSystem:
         previous_day = pd.Timestamp.now(tz=self.config.timezone).date()
 
         while self.is_running:
-            try:
-                logging.info(f"Starting trading loop")
-                loop_sleep_time = 30
-
-                now = pd.Timestamp.now(tz=self.config.timezone)
-                if now.date() > previous_day:
-                    Logger(now.date()) # Create new log file for new day to avoid excessively large files
-                    previous_day = now.date()
-
-                if not self.risk_manager.is_trading_day(now):
-                    msg = "Not a trading day. Waiting..."
-                    logging.warning(msg)
-                    self.message_queue.add_message(msg)
-                    time.sleep(60)
-                    continue
-                    
-                if not self.risk_manager.is_trading_hours(now):
-                    msg = "Outside trading hours. Waiting..."
-                    logging.warning(msg)
-                    self.message_queue.add_message(msg)
-                    self.portfolio_manager.clear_orders_statuses_positions()
-                    time.sleep(60)
-                    continue
                 
-                if not self.risk_manager.can_resume_trading_after_pause(now):
-                    msg = f"Trading paused triggered until {self.risk_manager.pause_end_time}. Waiting..."
-                    logging.warning(msg)
-                    self.message_queue.add_message(msg)
-                    time.sleep(60)
-                    continue
+            logging.info(f"Starting trading loop")
+            loop_sleep_time = 30
 
-                # Update or create positions from open orders
-                self.portfolio_manager.update_positions()
+            now = pd.Timestamp.now(tz=self.config.timezone)
+            if now.date() > previous_day:
+                Logger(now.date()) # Create new log file for new day to avoid excessively large files
+                previous_day = now.date()
 
-                # Check for cancelled market orders and resubmit them if required
-                self.portfolio_manager.check_cancelled_market_order()
+            if not self.risk_manager.is_trading_day(now):
+                msg = "Not a trading day. Waiting..."
+                logging.warning(msg)
+                self.message_queue.add_message(msg)
+                time.sleep(60)
+                continue
+                
+            if not self.risk_manager.is_trading_hours(now):
+                msg = "Outside trading hours. Waiting..."
+                logging.warning(msg)
+                self.message_queue.add_message(msg)
+                self.portfolio_manager.clear_orders_statuses_positions()
+                time.sleep(60)
+                continue
+            
+            if not self.risk_manager.can_resume_trading_after_pause(now):
+                msg = f"Trading paused triggered until {self.risk_manager.pause_end_time}. Waiting..."
+                logging.warning(msg)
+                self.message_queue.add_message(msg)
+                time.sleep(60)
+                continue
+
+            # Update or create positions from open orders
+            self.portfolio_manager.update_positions()
+
+            # Check for cancelled market orders and resubmit them if required
+            self.portfolio_manager.check_cancelled_market_order()
+                
+            # Check PnL for trading pause
+            logging.debug("Checking PnL for trading pause.")
+            pnl = self.portfolio_manager.daily_pnl()
+            logging.debug(f"PnL: {pnl}")
+
+            if self.risk_manager.should_pause_trading(pnl, self.config.number_of_contracts):
+                msg = f"PnL: {pnl} is below max 24h loss. Pausing trading."
+                logging.warning(msg)
+                self.message_queue.add_message(msg)
+                self.risk_manager.set_trading_pause_time(self.db)
+
+                logging.warning(f"Trading paused until {self.risk_manager.pause_end_time}")
+                time.sleep(60)
+                continue
+
+            self._check_trading_opportunities()
+
+            # Check if it's near end of trading day (3:59 PM or later)
+            now = pd.Timestamp.now(tz=self.config.timezone)
+            if self.risk_manager.perform_eod_close(
+                now, 
+                self.config.eod_exit_time,
+                self.config.trading_end_time,
+                self.portfolio_manager):
+                eod_pnl = self.portfolio_manager.daily_pnl()
+                df = pd.DataFrame({'pnl': [eod_pnl]})
+                df.to_csv(os.path.join(os.getcwd(), 'output', 'eod_pnl.csv'), index=False)
+                logging.info(f"End of day PnL: {eod_pnl}")
+
+            if self.config.save_market_data:
+                    self._save_market_data()
                     
-                # Check PnL for trading pause
-                logging.debug("Checking PnL for trading pause.")
-                pnl = self.portfolio_manager.daily_pnl()
-                logging.debug(f"PnL: {pnl}")
+            self.last_update_time = now
 
-                if self.risk_manager.should_pause_trading(pnl, self.config.number_of_contracts):
-                    msg = f"PnL: {pnl} is below max 24h loss. Pausing trading."
-                    logging.warning(msg)
-                    self.message_queue.add_message(msg)
-                    self.risk_manager.set_trading_pause_time(self.db)
-
-                    logging.warning(f"Trading paused until {self.risk_manager.pause_end_time}")
-                    time.sleep(60)
-                    continue
-
-                self._check_trading_opportunities()
-
-                # Check if it's near end of trading day (3:59 PM or later)
-                now = pd.Timestamp.now(tz=self.config.timezone)
-                if self.risk_manager.perform_eod_close(
-                    now, 
-                    self.config.eod_exit_time,
-                    self.config.trading_end_time,
-                    self.portfolio_manager):
-                    eod_pnl = self.portfolio_manager.daily_pnl()
-                    df = pd.DataFrame({'pnl': [eod_pnl]})
-                    df.to_csv(os.path.join(os.getcwd(), 'output', 'eod_pnl.csv'), index=False)
-                    logging.info(f"End of day PnL: {eod_pnl}")
-
-                if self.config.save_market_data:
-                        self._save_market_data()
-                        
-                self.last_update_time = now
-
-                logging.info(f"Trading loop complete. Sleeping for {loop_sleep_time} seconds...")
-                time.sleep(loop_sleep_time)
-
-            except Exception as e:
-                logging.error(f"Error in trading loop: {str(e)}")
-                time.sleep(10)
+            logging.info(f"Trading loop complete. Sleeping for {loop_sleep_time} seconds...")
+            time.sleep(loop_sleep_time)
 
     def _check_trading_opportunities(self):
         """Check for trading opportunities based on strategy"""
