@@ -4,7 +4,8 @@ export const getStatus = async () => {
     try {
         const response = await fetch(`${API_URL}/status`);
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const data = await response.json();
+            throw new Error(`HTTP error! status: ${response.status}, error message: ${data.error}`);
         }
         return await response.json();
     } catch (error) {
@@ -22,7 +23,8 @@ export const startTrading = async () => {
             },
         });
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const data = await response.json();
+            throw new Error(`HTTP error! status: ${response.status}, error message: ${data.error}`);
         }
         return await response.json();
     } catch (error) {

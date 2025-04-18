@@ -619,7 +619,7 @@ class PortfolioManager:
                         self.cancel_all_orders()
                         self.clear_orders_statuses_positions()
 
-                    raise ValueError(msg)
+                        raise ValueError(msg)
 
                 elif latest_db_position.quantity > int(matching_position['position']):
 
@@ -645,7 +645,7 @@ class PortfolioManager:
                         self.cancel_all_orders()
                         self.clear_orders_statuses_positions()
 
-                    raise ValueError(msg)
+                        raise ValueError(msg)
 
                 else:
                     logging.info("DB state consistent with IBKR.")
@@ -674,10 +674,19 @@ class PortfolioManager:
 
     def get_all_orders(self) -> List[Dict]:
         """Get all orders as serializable dictionaries"""
+        logging.debug(f"PortfolioManager: Getting all orders")
+
         orders = []
         for bracket_order in self.orders:
             for order, resubmitted in bracket_order:
                 order_status = self._get_order_status(order.orderId)
+
+                if not order_status:
+                    msg = f"PortfolioManager: Order status not found for order {order.orderId}. Status returned: {order_status}"
+                    logging.error(msg)
+                    self.message_queue.add_sys_error(msg)
+                    raise AttributeError(msg)
+
                 order_details = self.api.get_open_order(order.orderId)
                 contract = order_details['contract'] if order_details else None
                 order_dict = {

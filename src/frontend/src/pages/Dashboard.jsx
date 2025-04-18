@@ -17,6 +17,11 @@ const Dashboard = ({ systemError, setSystemError, systemSuccess, setSystemSucces
   const fetchStatus = async () => {
     try {
       const data = await getStatus();
+
+      console.log('data', data);
+      console.log('data.message', data.message);
+      console.log('data.system_error', data.system_error);
+
       setStatus(data);
 
       setError(null);
@@ -30,9 +35,10 @@ const Dashboard = ({ systemError, setSystemError, systemSuccess, setSystemSucces
         }, 3000);
         return () => clearTimeout(timer);
       }
-      
+
       // Only update system error if we receive a new non-null value
       if (data?.system_error) {
+        console.log('Setting system_error', data.system_error);
         setSystemError(data.system_error);
       }
 

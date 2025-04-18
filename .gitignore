@@ -12,3 +12,4 @@ node_modules/
 *ipynb
 node_modules/
 *.pyc
+*.db
