@@ -20,7 +20,6 @@ const Dashboard = ({ systemError, setSystemError, systemSuccess, setSystemSucces
 
       console.log('data', data);
       console.log('data.message', data.message);
-      console.log('data.system_error', data.system_error);
 
       setStatus(data);
 
@@ -36,14 +35,8 @@ const Dashboard = ({ systemError, setSystemError, systemSuccess, setSystemSucces
         return () => clearTimeout(timer);
       }
 
-      // Only update system error if we receive a new non-null value
-      if (data?.system_error) {
-        console.log('Setting system_error', data.system_error);
-        setSystemError(data.system_error);
-      }
-
     } catch (err) {
-      console.log('Setting error', err.message);
+      console.log('Error fetching status', err.message);
       setError(err.message);
 
     } finally {

@@ -62,8 +62,7 @@ def get_status():
             'positions': trading_system.portfolio_manager.get_all_positions(),
             'orders': trading_system.portfolio_manager.get_all_orders(),
             'daily_pnl': trading_system.portfolio_manager.daily_pnl(),
-            'message': trading_system.message_queue.read_message(),
-            'system_error': trading_system.message_queue.read_sys_error()
+            'message': trading_system.message_queue.read_message()
         })
     except Exception as e:
         msg = f"FlaskAPI  - Error from endpoint /api/status: {str(e)}"
