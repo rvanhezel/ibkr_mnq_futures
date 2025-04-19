@@ -83,12 +83,12 @@ class TradingSystem:
                 raise Exception(msg)
 
         except ConnectionError as e:
-            msg = f"Failed to connect to Interactive Brokers: {str(e)}"
+            msg = f"Error during start: Failed to connect to Interactive Brokers: {str(e)}"
             logging.error(msg)
             raise ConnectionError(msg)
 
         except DatabaseStateError as e:
-            msg = f"Database state error: {str(e)}"
+            msg = f"Error during start: Database state error: {str(e)}"
             logging.error(msg)
             raise DatabaseStateError(msg)
 
@@ -98,7 +98,7 @@ class TradingSystem:
             self.message_queue.add_message(msg)
 
         except Exception as e:
-            msg = f"Unexpected error within trading system: {str(e)}"
+            msg = f"Unexpected error during start: {str(e)}"
             logging.error(msg)
             raise Exception(msg)
 

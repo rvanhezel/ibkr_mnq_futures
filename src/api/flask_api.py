@@ -46,8 +46,9 @@ try:
     
     logging.info("Configuration and trading system initialized successfully")
 except Exception as e:
-    logging.error(f"Error initializing configuration: {str(e)}")
-    raise
+    msg = f"FlaskAPI  - Error initializing configuration: {str(e)}"
+    logging.error(msg)
+    raise Exception(msg)
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
@@ -65,8 +66,9 @@ def get_status():
             'system_error': trading_system.message_queue.read_sys_error()
         })
     except Exception as e:
-        logging.error(f"Error getting status: {str(e)}")
-        return jsonify({'error': f'Error getting status: {str(e)}'}), 500
+        msg = f"FlaskAPI  - Error from endpoint /api/status: {str(e)}"
+        logging.error(msg)
+        return jsonify({'error': msg}), 500
 
 @app.route('/api/start', methods=['POST'])
 def start_trading():
@@ -82,8 +84,9 @@ def start_trading():
             'status': 'running'
         })
     except Exception as e:
-        logging.error(f"FaskAPI Error starting trading system: {str(e)}")
-        return jsonify({'error': f'FaskAPI Error starting trading system: {str(e)}'}), 500
+        msg = f"FlaskAPI  - Error from endpoint /api/start: {str(e)}"
+        logging.error(msg)
+        return jsonify({'error': msg}), 500
 
 @app.route('/api/stop', methods=['POST'])
 def stop_trading():
@@ -99,8 +102,9 @@ def stop_trading():
             'status': 'stopped'
         })
     except Exception as e:
-        logging.error(f"Error stopping trading system: {str(e)}")
-        return jsonify({'error': f'Error stopping trading system: {str(e)}'}), 500
+        msg = f"FlaskAPI  - Error from endpoint /api/stop: {str(e)}"
+        logging.error(msg)
+        return jsonify({'error': msg}), 500
 
 @app.route('/api/settings', methods=['GET', 'POST', 'OPTIONS'])
 def handle_settings():
@@ -225,9 +229,11 @@ def handle_settings():
             except Exception as e:
                 logging.error(f"Error updating settings: {str(e)}")
                 return jsonify({'error': f'Error updating settings: {str(e)}'}), 500
+            
     except Exception as e:
-        logging.error(f"Error handling settings request: {str(e)}")
-        return jsonify({'error': f'Error handling settings request: {str(e)}'}), 500
+        msg = f"FlaskAPI  - Error from endpoint /api/settings: {str(e)}"
+        logging.error(msg)
+        return jsonify({'error': msg}), 500
 
 @app.route('/api/reinitialize-db', methods=['POST'])
 def reinitialize_db():
@@ -239,8 +245,11 @@ def reinitialize_db():
         trading_system.db.reinitialize()
         trading_system.portfolio_manager.clear_orders_statuses_positions()
         return jsonify({'status': 'success', 'message': 'Database reinitialized successfully'})
+    
     except Exception as e:
-        return jsonify({'error': f'Error reinitializing database: {str(e)}'}), 500
+        msg = f"FlaskAPI  - Error from endpoint /api/reinitialize-db: {str(e)}"
+        logging.error(msg)
+        return jsonify({'error': msg}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000) 
