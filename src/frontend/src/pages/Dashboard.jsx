@@ -37,7 +37,7 @@ const Dashboard = ({ systemError, setSystemError, systemSuccess, setSystemSucces
 
     } catch (err) {
       console.log('Error fetching status', err.message);
-      setError(err.message);
+      setError(`Error fetching status: ${err.message}`);
 
     } finally {
       setIsLoading(false);
