@@ -67,46 +67,48 @@ class TradingSystem:
             self.portfolio_manager.populate_from_db() 
             self.risk_manager.populate_from_db(self.db)
 
-            while True:
+            try:
 
-                try:
+                self._trading_loop()
+                self.last_update_time = pd.Timestamp.now(tz=self.config.timezone)
 
-                    self._trading_loop()
-                    self.last_update_time = pd.Timestamp.now(tz=self.config.timezone)
+            except DatabaseStateError as e:
+                msg = f"DB error in trading loop: {str(e)}"
+                logging.error(msg)
+                raise DatabaseStateError(msg)
 
-                except DatabaseStateError as e:
-                    logging.error(f"DB error in trading loop: {str(e)}")
-                    raise
-
-                except Exception as e:
-                    logging.error(f"Error in trading loop: {str(e)}")
-                    time.sleep(10)  
+            except Exception as e:
+                msg = f"Error in trading loop: {str(e)}"
+                logging.error(msg)
+                raise Exception(msg)
 
         except ConnectionError as e:
-            logging.error(f"Failed to connect to Interactive Brokers: {str(e)}")
-            self.message_queue.add_sys_error(str(e))
-            self.is_running = False
+            msg = f"Failed to connect to Interactive Brokers: {str(e)}"
+            logging.error(msg)
+            raise ConnectionError(msg)
 
         except DatabaseStateError as e:
-            logging.error(f"Database state error: {str(e)}")
-            self.message_queue.add_sys_error(str(e))
-            self.is_running = False
-            raise
+            msg = f"Database state error: {str(e)}"
+            logging.error(msg)
+            raise DatabaseStateError(msg)
 
         except KeyboardInterrupt:
-            logging.info("KeyboardInterrupt - Shutting down trading system...")
-            self.message_queue.add_sys_error("KeyboardInterrupt")
-            self.is_running = False
+            msg = "KeyboardInterrupt - Shutting down trading system..."
+            logging.info(msg)
+            self.message_queue.add_message(msg)
 
         except Exception as e:
-            logging.error(f"Unexpected error within trading system: {str(e)}")
-            self.message_queue.add_sys_error(str(e))
-            self.is_running = False
+            msg = f"Unexpected error within trading system: {str(e)}"
+            logging.error(msg)
+            raise Exception(msg)
 
         finally:
             self.api.disconnect()
-            self._save_market_data()
             self.is_running = False
+
+            if self.config.save_market_data:
+                self._save_market_data()
+
             logging.info("Trading system shut down")
 
     def stop(self):

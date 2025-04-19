@@ -605,7 +605,7 @@ class PortfolioManager:
                         
                         msg += f" Reinitializing database."
                         logging.error(msg)
-                        self.message_queue.add_sys_error(msg)
+                        self.message_queue.add_message(msg)
 
                         self.cancel_all_orders()
                         self.clear_orders_statuses_positions()
@@ -615,8 +615,6 @@ class PortfolioManager:
                     else:
 
                         logging.error(msg)
-                        self.message_queue.add_sys_error(msg)
-
                         self.cancel_all_orders()
                         self.clear_orders_statuses_positions()
 
@@ -631,7 +629,7 @@ class PortfolioManager:
                     
                         msg += f" Reinitializing database."
                         logging.error(msg)
-                        self.message_queue.add_sys_error(msg)
+                        self.message_queue.add_message(msg)
                         
                         self.cancel_all_orders()
                         self.clear_orders_statuses_positions()
@@ -641,8 +639,6 @@ class PortfolioManager:
                     else:
 
                         logging.error(msg)
-                        self.message_queue.add_sys_error(msg)
-
                         self.cancel_all_orders()
                         self.clear_orders_statuses_positions()
 
@@ -655,7 +651,6 @@ class PortfolioManager:
 
     def get_all_positions(self) -> List[Dict]:
         """Get all positions as serializable dictionaries"""
-        logging.debug(f"PortfolioManager: Updating positions and returns for api calls.")
         # self.update_positions(False)
 
         positions = []
@@ -683,7 +678,6 @@ class PortfolioManager:
                 if not order_status:
                     msg = f"PortfolioManager: Order status not found for order {order.orderId}. Status returned: {order_status}"
                     logging.error(msg)
-                    self.message_queue.add_sys_error(msg)
                     raise AttributeError(msg)
 
                 order_details = self.api.get_open_order(order.orderId)

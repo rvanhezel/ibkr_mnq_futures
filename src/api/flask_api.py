@@ -82,8 +82,8 @@ def start_trading():
             'status': 'running'
         })
     except Exception as e:
-        logging.error(f"Error starting trading system: {str(e)}")
-        return jsonify({'error': f'Error starting trading system: {str(e)}'}), 500
+        logging.error(f"FaskAPI Error starting trading system: {str(e)}")
+        return jsonify({'error': f'FaskAPI Error starting trading system: {str(e)}'}), 500
 
 @app.route('/api/stop', methods=['POST'])
 def stop_trading():

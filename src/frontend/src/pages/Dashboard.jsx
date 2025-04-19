@@ -24,7 +24,7 @@ const Dashboard = ({ systemError, setSystemError, systemSuccess, setSystemSucces
 
       setStatus(data);
 
-      setError(null);
+      // setError(null);
 
       // Update messages from the message queue
       const newMessage = data?.message;
@@ -43,6 +43,7 @@ const Dashboard = ({ systemError, setSystemError, systemSuccess, setSystemSucces
       }
 
     } catch (err) {
+      console.log('Setting error', err.message);
       setError(err.message);
 
     } finally {
