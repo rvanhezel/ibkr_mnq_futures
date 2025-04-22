@@ -158,7 +158,7 @@ class Database:
                         cur_order.orderId,
                         cur_order.action,
                         cur_order.orderType,
-                        cur_order.totalQuantity,
+                        int(cur_order.totalQuantity),
                         cur_order.auxPrice,
                         cur_order.lmtPrice,
                         cur_order.parentId,

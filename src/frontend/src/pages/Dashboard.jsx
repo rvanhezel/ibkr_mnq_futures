@@ -6,6 +6,9 @@ const Dashboard = ({ systemError, setSystemError, systemSuccess, setSystemSucces
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState(null);
+  const [tradingPauseMsg, setTradingPauseMsg] = useState(null);
+  const [outsideTradingScheduleMsg, setOutsideTradingScheduleMsg] = useState(null);
+
 
   useEffect(() => {
     fetchStatus();
@@ -20,6 +23,8 @@ const Dashboard = ({ systemError, setSystemError, systemSuccess, setSystemSucces
 
       console.log('data', data);
       console.log('data.message', data.message);
+      console.log('data.trading_pause_msg', data.trading_pause_msg);
+      console.log('data.outside_trading_schedule_msg', data.outside_trading_schedule_msg);
 
       setStatus(data);
 
@@ -33,6 +38,20 @@ const Dashboard = ({ systemError, setSystemError, systemSuccess, setSystemSucces
           setMessage(null);
         }, 3000);
         return () => clearTimeout(timer);
+      }
+
+      const newTradingPauseMsg = data?.trading_pause_msg;
+      if (newTradingPauseMsg) {
+        setTradingPauseMsg(newTradingPauseMsg);
+      } else {
+        setTradingPauseMsg(null);
+      }
+
+      const newOutsideTradingScheduleMsg = data?.outside_trading_schedule_msg;
+      if (newOutsideTradingScheduleMsg) {
+        setOutsideTradingScheduleMsg(newOutsideTradingScheduleMsg);
+      } else {
+        setOutsideTradingScheduleMsg(null);
       }
 
     } catch (err) {
@@ -124,6 +143,18 @@ const Dashboard = ({ systemError, setSystemError, systemSuccess, setSystemSucces
       {message && (
         <div className="px-4 py-3 rounded mb-4 bg-yellow-100 border-yellow-400 text-yellow-700">
           {message}
+        </div>
+      )}
+
+      {tradingPauseMsg && (
+        <div className="px-4 py-3 rounded mb-4 bg-yellow-100 border-yellow-400 text-yellow-700">
+          {tradingPauseMsg}
+        </div>
+      )}
+
+      {outsideTradingScheduleMsg && (
+        <div className="px-4 py-3 rounded mb-4 bg-yellow-100 border-yellow-400 text-yellow-700">
+          {outsideTradingScheduleMsg}
         </div>
       )}
 

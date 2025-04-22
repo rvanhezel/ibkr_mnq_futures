@@ -1,5 +1,6 @@
-import time
+from src.api.message_queue import MessageQueue
 from src.portfolio.portfolio_manager import PortfolioManager
+import time
 import datetime
 import pytz
 import pandas as pd
@@ -109,7 +110,8 @@ class RiskManager:
                            now: pd.Timestamp, 
                            eod_exit_time: str, 
                            market_close_time: str,
-                           ptf_manager: PortfolioManager):
+                           ptf_manager: PortfolioManager, 
+                           message_queue: MessageQueue):
         """Perform end of day checks"""
         eod_cutoff = pd.Timestamp(
                 now.year, 
@@ -128,7 +130,9 @@ class RiskManager:
                 tz=self.timezone)
 
         if market_close_time >= now >= eod_cutoff:
-            logging.info(f"Current time: {now} - End of day approaching - closing all positions and cancelling orders")
+            msg = f"Current time: {now} - End of day approaching - closing all positions and cancelling orders"
+            logging.info(msg)
+            message_queue.add_message(msg)
             
             ptf_manager.cancel_all_orders()
             ptf_manager.close_all_positions()

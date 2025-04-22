@@ -117,6 +117,7 @@ class TradingSystem:
         self.is_running = False
         self.last_update_time = pd.Timestamp.now(tz=self.config.timezone)
         self.api.disconnect()
+        self.message_queue.clear()
 
     def _trading_loop(self):
         """Main trading loop"""
@@ -135,14 +136,14 @@ class TradingSystem:
             if not self.risk_manager.is_trading_day(now):
                 msg = "Not a trading day. Waiting..."
                 logging.warning(msg)
-                self.message_queue.add_message(msg)
+                self.message_queue.outside_trading_schedule_msg = msg
                 time.sleep(60)
                 continue
                 
             if not self.risk_manager.is_trading_hours(now):
                 msg = "Outside trading hours. Waiting..."
                 logging.warning(msg)
-                self.message_queue.add_message(msg)
+                self.message_queue.outside_trading_schedule_msg = msg
                 self.portfolio_manager.clear_orders_statuses_positions()
                 time.sleep(60)
                 continue
@@ -150,9 +151,13 @@ class TradingSystem:
             if not self.risk_manager.can_resume_trading_after_pause(now):
                 msg = f"Trading paused triggered until {self.risk_manager.pause_end_time}. Waiting..."
                 logging.warning(msg)
-                self.message_queue.add_message(msg)
+                self.message_queue.trading_pause_msg = msg
                 time.sleep(60)
                 continue
+
+            # If no trading pause or outside trading schedule, clear the messages
+            self.message_queue.trading_pause_msg = None
+            self.message_queue.outside_trading_schedule_msg = None
 
             # Update or create positions from open orders
             self.portfolio_manager.update_positions()
@@ -183,7 +188,8 @@ class TradingSystem:
                 now, 
                 self.config.eod_exit_time,
                 self.config.trading_end_time,
-                self.portfolio_manager):
+                self.portfolio_manager,
+                self.message_queue):
                 eod_pnl = self.portfolio_manager.daily_pnl()
                 df = pd.DataFrame({'pnl': [eod_pnl]})
                 df.to_csv(os.path.join(os.getcwd(), 'output', 'eod_pnl.csv'), index=False)
