@@ -13,7 +13,7 @@ const Dashboard = ({ systemError, setSystemError, systemSuccess, setSystemSucces
   useEffect(() => {
     fetchStatus();
     // Set up polling for status updates
-    const interval = setInterval(fetchStatus, 5000);
+    const interval = setInterval(fetchStatus, 2000);
     return () => clearInterval(interval);
   }, []);
 
