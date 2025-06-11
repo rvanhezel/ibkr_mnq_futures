@@ -14,3 +14,4 @@ node_modules/
 *.pyc
 *.db
 run - backup.cfg
+dev_tests/
